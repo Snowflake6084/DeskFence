@@ -100,7 +100,7 @@ The source is plain C# (WinForms), compatible with C# 5:
 | File | Contents |
 |---|---|
 | `src/Program.cs` | Entry point, single instance, input dialog, self-test |
-| `src/Controller.cs` | Tray, fence management, store/release, watchdog |
+| `src/Controller.cs` | Tray, fence management, store/release |
 | `src/FenceForm.cs` | Fence window drawing, mouse handling, drag and drop |
 | `src/Model.cs` | Settings, file storage, layout math |
 | `src/IconCache.cs` | System file icons |
