@@ -223,6 +223,10 @@ namespace DeskFence
                 int cmd = m.WParam.ToInt32() & 0xFFF0;
                 if (cmd == 0xF020 /*SC_MINIMIZE*/ || cmd == 0xF030 /*SC_MAXIMIZE*/) return; // 不允许被最小化/最大化
             }
+            else if (m.Msg == 0x0011 /*WM_QUERYENDSESSION*/ || (m.Msg == 0x0016 /*WM_ENDSESSION*/ && m.WParam != IntPtr.Zero))
+            {
+                app.OnSessionEnding(); // 关机/注销：文件放回桌面
+            }
             else if (m.Msg == 0x0002 /*WM_DESTROY*/)
             {
                 try { if (!ClosingByApp) Log.Write("格子「" + Data.Title + "」窗口被系统销毁（可能是资源管理器重启），将自动重建"); }

@@ -88,12 +88,12 @@ namespace DeskFence
                 pendingNotice = null;
             }
             ListenShowTray();
-            SystemEvents.SessionEnding += delegate { Save(); };
+            // 关机/注销由格子窗口收到 WM_QUERYENDSESSION 时调用 OnSessionEnding（在界面线程里，安全）
 
             // 收纳失败的（文件正被打开等）每 20 秒重试
             retryTimer = new Timer();
             retryTimer.Interval = 20000;
-            retryTimer.Tick += delegate { if (Config.HideDesktopIcons && CollectAll(true)) RenderAll(); };
+            retryTimer.Tick += delegate { if (!sessionEnding && Config.HideDesktopIcons && CollectAll(true)) RenderAll(); };
             retryTimer.Start();
 
             // 每 2 秒检查格子是否还在桌面上（防止被最小化、被压到桌面下面、跑到屏幕外）
@@ -137,6 +137,40 @@ namespace DeskFence
                 if (winEventHook == IntPtr.Zero) Log.Write("前台窗口监听失败，只靠 2 秒自检");
             }
             catch (Exception ex) { Log.Write("前台窗口监听失败: " + ex.Message); }
+        }
+
+        bool sessionEnding;
+
+        /// <summary>
+        /// 关机/注销/重启：把收纳的文件全部放回桌面。
+        /// 这样下次开机如果 DeskFence 没启动，文件就在桌面上；启动了会再自动收回格子。
+        /// </summary>
+        public void OnSessionEnding()
+        {
+            if (sessionEnding || exiting) return;
+            sessionEnding = true;
+            try
+            {
+                List<string> failed = Storage.RestoreAll(Config);
+                Config.CleanExit = failed.Count == 0;
+                Save();
+                if (failed.Count > 0) Log.Write("关机时有文件没放回桌面（正被占用）: " + string.Join(", ", failed.ToArray()));
+                RenderAll();
+            }
+            catch (Exception ex) { Log.Write("关机放回文件出错: " + ex.Message); }
+            // 如果关机被取消了，程序还在运行：1 分钟后恢复收纳
+            Timer t = new Timer();
+            t.Interval = 60000;
+            t.Tick += delegate
+            {
+                t.Stop(); t.Dispose();
+                sessionEnding = false;
+                Config.CleanExit = false;
+                if (Config.HideDesktopIcons) CollectAll(true);
+                Save();
+                RenderAll();
+            };
+            t.Start();
         }
 
         /// <summary>旧版（隐藏属性方式）迁移；修正记录与实际文件不一致的地方</summary>
