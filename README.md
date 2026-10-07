@@ -31,6 +31,7 @@
 
 - 收纳的文件会从桌面移到 `%LOCALAPPDATA%\DeskFence\Store`（与桌面同盘，移动只是改名，不复制数据），退出时移回桌面原位置；放回时遇到同名文件会自动改名为"名字 (2)"，不会覆盖
 - 正在被打开的文件（比如 Excel 开着的表）无法移动，会暂时留在桌面，关闭后自动收纳
+- `DeskFence.exe` 本身不能放进格子（否则开机自启找不到它），可以放它的快捷方式
 - 公共桌面（所有用户共用）里的快捷方式需要管理员权限才能移动，会继续留在桌面
 - 设置保存在 `%APPDATA%\DeskFence\config.xml`，出错日志在同目录 `error.log`
 
@@ -84,6 +85,7 @@ See `README.txt` in the zip for detailed usage (in Chinese).
 
 - Stored files are moved from the desktop to `%LOCALAPPDATA%\DeskFence\Store` (same drive as the desktop, so it is a rename, not a copy) and moved back on exit. If a file with the same name already exists on the desktop, the returned file is renamed to "name (2)" instead of overwriting
 - Files that are currently open (e.g. a workbook open in Excel) can't be moved; they stay on the desktop and are stored automatically once closed
+- `DeskFence.exe` itself can't be stored in a fence (auto start would no longer find it); store a shortcut to it instead
 - Shortcuts on the Public Desktop need administrator rights to move and therefore stay on the desktop
 - Settings are saved in `%APPDATA%\DeskFence\config.xml`; errors are logged to `error.log` in the same folder
 

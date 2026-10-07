@@ -67,6 +67,12 @@ namespace DeskFence
                 "The tray icon is now hidden.\n\nTo open settings later, click the gear button at the top right of any fence.\nTo bring the tray icon back, run DeskFence.exe again, or uncheck this option in settings.",
                 "トレイアイコンを非表示にしました。\n\n設定はボックスのタイトルバー右上の歯車ボタンから開けます。\nトレイアイコンを戻すには DeskFence.exe をもう一度実行するか、設定でチェックを外してください。");
             A("trayRestored", "DeskFence 正在运行，托盘图标已恢复", "DeskFence is running. Tray icon restored.", "DeskFence は実行中です。トレイアイコンを再表示しました。");
+            A("selfNoCollect", "DeskFence 程序本身不能放进格子，否则开机时找不到它，无法自动启动。\n\n建议：把 DeskFence 放在一个固定的文件夹里（比如 D:\\工具\\DeskFence），运行一次让开机启动指向那里；想放进格子的话，拖它的快捷方式进来。",
+                "DeskFence itself can't be stored in a fence; otherwise Windows can't find it at startup and auto start stops working.\n\nTip: keep DeskFence in a fixed folder (e.g. D:\\Tools\\DeskFence), run it once from there, and drag a shortcut to it into a fence instead.",
+                "DeskFence 本体はボックスに収納できません（起動時に見つからず、自動起動できなくなるため）。\n\nおすすめ：DeskFence を固定のフォルダー（例 D:\\Tools\\DeskFence）に置いて一度そこから実行し、ボックスにはショートカットを入れてください。");
+            A("selfReleased", "已把 DeskFence 程序放回桌面：程序本身放在格子里会导致开机无法自动启动。",
+                "DeskFence was moved back to the desktop: storing the program itself in a fence breaks auto start.",
+                "DeskFence をデスクトップに戻しました：本体をボックスに入れると自動起動できなくなります。");
             A("openConfig", "打开配置文件夹", "Open settings folder", "設定フォルダーを開く");
             A("exit", "退出（收纳的文件放回桌面）", "Exit (stored files go back to desktop)", "終了（収納したファイルをデスクトップに戻す）");
             A("collectMode", "收纳桌面文件（移入格子，退出时放回桌面）", "Store desktop files in fences (returned to desktop on exit)", "デスクトップのファイルを収納（終了時にデスクトップに戻す）");

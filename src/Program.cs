@@ -293,6 +293,24 @@ namespace DeskFence
             AppConfig cy = AppConfig.Load(file);
             Check(!cy.CleanExit && cy.Fences[0].Items[0].StoredPath == "q", "配置读写：收纳位置和退出状态");
 
+            // 8. 程序本身不能收进格子
+            string appDir = Path.Combine(dir, "工具");
+            Directory.CreateDirectory(appDir);
+            string fakeExe = Path.Combine(appDir, "DeskFence.exe");
+            File.WriteAllText(fakeExe, "x");
+            string savedExe = Controller.ExePath;
+            Controller.ExePath = fakeExe;
+            Check(Controller.IsSelf(fakeExe), "识别自身：exe 本身");
+            Check(Controller.IsSelf(appDir), "识别自身：包含 exe 的文件夹");
+            Check(Controller.IsSelf(Path.Combine(desk, "deskfence.EXE")), "识别自身：同名 exe（不区分大小写）");
+            Check(!Controller.IsSelf(Path.Combine(desk, "jd_profit (2).xlsx")) && !Controller.IsSelf(desk + "_none"), "识别自身：普通文件不误判");
+            Check(!Controller.IsSelf(Path.Combine(desk, "DeskFence.lnk")), "识别自身：快捷方式可以放进格子");
+            string sep = Path.DirectorySeparatorChar.ToString();
+            Check(Controller.Relocate(fakeExe, fakeExe, desk + sep + "DeskFence.exe") == desk + sep + "DeskFence.exe", "移动后路径：exe 本身");
+            Check(Controller.Relocate(fakeExe, appDir, desk + sep + "工具") == Path.Combine(desk + sep + "工具", "DeskFence.exe"), "移动后路径：所在文件夹");
+            Check(Controller.Relocate(fakeExe, desk, store) == fakeExe, "移动后路径：无关移动不变");
+            Controller.ExePath = savedExe;
+
             // 6. 多语言
             Check(T.CountIncomplete() == 0, "语言：所有词条中英日齐全");
             T.Set("en"); string en = T.S("newFence");

@@ -81,6 +81,12 @@ namespace DeskFence
             BuildTray();
             StartWatchers();
             StartWatchdog();
+            if (pendingNotice != null)
+            {
+                if (Config.HideTray) MessageBox.Show(pendingNotice, "DeskFence", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                else Notify(pendingNotice);
+                pendingNotice = null;
+            }
             ListenShowTray();
             SystemEvents.SessionEnding += delegate { Save(); };
 
@@ -148,7 +154,54 @@ namespace DeskFence
                     if (!string.IsNullOrEmpty(it.StoredPath) && !DesktopHelper.Exists(it.StoredPath))
                         it.StoredPath = null;
                 }
+            // 程序自己被收进了格子（旧版允许这样做）：放回桌面并移出格子，否则开机自启找不到它
+            foreach (FenceData f in Config.Fences)
+                for (int i = f.Items.Count - 1; i >= 0; i--)
+                {
+                    ItemData it = f.Items[i];
+                    if (!IsSelf(it.CurrentPath())) continue;
+                    string before = it.CurrentPath();
+                    if (it.IsStored() && Storage.Restore(it) != null) continue; // 放不回去就先留着，下次再试
+                    ExePath = Relocate(ExePath, before, it.Path);
+                    f.Items.RemoveAt(i);
+                    pendingNotice = T.S("selfReleased");
+                }
             Native.RefreshDesktop();
+        }
+
+        /// <summary>本程序 exe 当前的真实路径（启动后如果被挪动过，会在这里更新）</summary>
+        public static string ExePath = Application.ExecutablePath;
+        string pendingNotice;
+
+        /// <summary>这个路径是不是本程序（exe 本身，或包含 exe 的文件夹，或同名的 exe）</summary>
+        public static bool IsSelf(string p)
+        {
+            if (string.IsNullOrEmpty(p)) return false;
+            try
+            {
+                string exe = ExePath;
+                string exeName = Path.GetFileName(exe);
+                if (DesktopHelper.SamePath(p, exe)) return true;
+                if (Directory.Exists(p))
+                {
+                    string dir = Path.GetFullPath(p).TrimEnd('\\', '/') + Path.DirectorySeparatorChar;
+                    if (exe.StartsWith(dir, StringComparison.OrdinalIgnoreCase)) return true;
+                    if (File.Exists(Path.Combine(p, exeName))) return true;
+                    return false;
+                }
+                return string.Equals(Path.GetFileName(p), exeName, StringComparison.OrdinalIgnoreCase);
+            }
+            catch { return false; }
+        }
+
+        /// <summary>文件或其所在文件夹从 from 移到 to 之后，exe 的新路径</summary>
+        internal static string Relocate(string exe, string from, string to)
+        {
+            if (DesktopHelper.SamePath(exe, from)) return to;
+            string prefix = from.TrimEnd('\\', '/') + Path.DirectorySeparatorChar;
+            if (exe.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+                return Path.Combine(to, exe.Substring(prefix.Length));
+            return exe;
         }
 
         /// <summary>把所有还在桌面上的项目收进格子。返回是否有变化。</summary>
@@ -170,7 +223,7 @@ namespace DeskFence
         {
             try
             {
-                ProcessStartInfo psi = new ProcessStartInfo(Application.ExecutablePath, "--watchdog " + Process.GetCurrentProcess().Id);
+                ProcessStartInfo psi = new ProcessStartInfo(ExePath, "--watchdog " + Process.GetCurrentProcess().Id);
                 psi.UseShellExecute = false;
                 psi.CreateNoWindow = true;
                 Process.Start(psi);
@@ -328,11 +381,13 @@ namespace DeskFence
         {
             if (index < 0 || index > target.Data.Items.Count) index = target.Data.Items.Count;
             List<string> failed = new List<string>();
+            bool selfBlocked = false;
             foreach (string raw in files)
             {
                 if (string.IsNullOrEmpty(raw)) continue;
                 string p = raw;
                 if (DesktopHelper.SamePath(p, Storage.Root) || DesktopHelper.SamePath(p, AppConfig.DataDir)) continue;
+                if (IsSelf(p)) { selfBlocked = true; continue; } // 程序本身不能收进格子，否则开机自启找不到它
                 ItemData it = null;
                 // 已在某个格子里：移过来
                 foreach (FenceData f in Config.Fences)
@@ -362,6 +417,7 @@ namespace DeskFence
             target.ResetHover();
             Save();
             if (failed.Count > 0) Notify(T.F("cantCollect", string.Join("\n", failed.ToArray())));
+            if (selfBlocked) MessageBox.Show(T.S("selfNoCollect"), "DeskFence", MessageBoxButtons.OK, MessageBoxIcon.Information);
         }
 
         // ================= 文件变化 =================
@@ -597,7 +653,7 @@ namespace DeskFence
             {
                 using (RegistryKey k = Registry.CurrentUser.CreateSubKey(RunKey))
                 {
-                    if (on) k.SetValue("DeskFence", "\"" + Application.ExecutablePath + "\"");
+                    if (on) k.SetValue("DeskFence", "\"" + ExePath + "\"");
                     else if (k.GetValue("DeskFence") != null) k.DeleteValue("DeskFence");
                 }
             }
