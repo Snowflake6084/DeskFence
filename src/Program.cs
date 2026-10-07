@@ -297,6 +297,14 @@ namespace DeskFence
             AppConfig cy = AppConfig.Load(file);
             Check(!cy.CleanExit && cy.Fences[0].Items[0].StoredPath == "q", "配置读写：收纳位置和退出状态");
 
+            // 10. 配置文件开头说明：保存成功（旧版这里用了 .NET Framework 没有的方法，保存直接失败）
+            {
+                string f10 = Path.Combine(dir, "c10.xml");
+                AppConfig c10 = new AppConfig(); c10.BgAlphaPercent = 33;
+                c10.Save(f10);
+                Check(AppConfig.Load(f10).BgAlphaPercent == 33, "保存：带说明的配置能写入并读回");
+            }
+
             // 9. 找回"已不存在"的项目
             {
                 string rdesk = Path.Combine(dir, "rdesk"), rstore = Path.Combine(dir, "rstore");

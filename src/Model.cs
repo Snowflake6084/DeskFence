@@ -135,7 +135,7 @@ namespace DeskFence
                 "  也可以直接到上面的文件夹里把文件剪切出来。\r\n" +
                 "-->";
             int decl = xml.IndexOf("?>");
-            xml = decl >= 0 ? xml.Substring(0, decl + 2) + note + xml.Substring(decl + 2) : note.TrimStart() + "\r\n" + xml;
+            xml = decl >= 0 ? xml.Substring(0, decl + 2) + note + xml.Substring(decl + 2) : note.TrimStart('\r', '\n') + "\r\n" + xml;
             File.WriteAllText(tmp, xml, new UTF8Encoding(false));
             if (File.Exists(file))
             {
@@ -223,9 +223,20 @@ namespace DeskFence
             {
                 string target = UniqueTarget(it.Path);
                 string dir = System.IO.Path.GetDirectoryName(target);
-                if (!Directory.Exists(dir)) Directory.CreateDirectory(dir);
-                if (Directory.Exists(it.StoredPath)) Directory.Move(it.StoredPath, target);
-                else File.Move(it.StoredPath, target);
+                try
+                {
+                    if (!Directory.Exists(dir)) Directory.CreateDirectory(dir);
+                    MoveAny(it.StoredPath, target);
+                }
+                catch (UnauthorizedAccessException)
+                {
+                    // 公共桌面（C:\Users\Public\Desktop）普通权限能移出、不能放回：改放到自己的桌面，效果一样
+                    string own = DesktopHelper.UserDesktop;
+                    if (string.IsNullOrEmpty(own) || DesktopHelper.SamePath(dir, own)) throw;
+                    target = UniqueTarget(System.IO.Path.Combine(own, System.IO.Path.GetFileName(target)));
+                    MoveAny(it.StoredPath, target);
+                    Log.Write("公共桌面没有写入权限，已放到自己的桌面：" + target);
+                }
                 string holder = System.IO.Path.GetDirectoryName(it.StoredPath);
                 try { if (Directory.Exists(holder) && Directory.GetFileSystemEntries(holder).Length == 0) Directory.Delete(holder); } catch { }
                 it.Path = target;
@@ -237,6 +248,12 @@ namespace DeskFence
                 Log.Write("放回桌面失败 " + it.StoredPath + " -> " + it.Path + ": " + ex.Message);
                 return ex.Message;
             }
+        }
+
+        static void MoveAny(string from, string to)
+        {
+            if (Directory.Exists(from)) Directory.Move(from, to);
+            else File.Move(from, to);
         }
 
         public static string UniqueTarget(string p)

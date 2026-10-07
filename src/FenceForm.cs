@@ -54,6 +54,7 @@ namespace DeskFence
         int MinH { get { return L.TitleH + L.R(40); } }
 
         IntPtr desktopHost = IntPtr.Zero;
+        static DateTime lastHostLog = DateTime.MinValue, lastBelowLog = DateTime.MinValue;
         bool wasBelow;
 
         /// <summary>
@@ -75,12 +76,12 @@ namespace DeskFence
                 IntPtr host = Native.FindDesktopHost();
                 if (host != IntPtr.Zero && host != desktopHost)
                 {
-                    if (desktopHost != IntPtr.Zero) Log.Write("桌面窗口变了，格子重新挂载");
+                    if (desktopHost != IntPtr.Zero && (DateTime.Now - lastHostLog).TotalMinutes > 10) { lastHostLog = DateTime.Now; Log.Write("桌面窗口变了，格子重新挂载（10 分钟内不再重复记录）"); }
                     AttachToDesktop();
                 }
                 if (desktopHost != IntPtr.Zero && !IsAboveDesktop())
                 {
-                    if (!wasBelow) Log.Write("格子「" + Data.Title + "」被压到桌面下面，已提上来");
+                    if (!wasBelow && (DateTime.Now - lastBelowLog).TotalMinutes > 10) { lastBelowLog = DateTime.Now; Log.Write("格子「" + Data.Title + "」被压到桌面下面，已提上来"); }
                     wasBelow = true;
                     PlaceAboveDesktop();
                 }
