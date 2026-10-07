@@ -47,7 +47,7 @@ namespace DeskFence
                         if (EventWaitHandle.TryOpenExisting(ShowTrayEventName, out ev)) { ev.Set(); ev.Dispose(); return; }
                     }
                     catch { }
-                    try { T.Set(AppConfig.Load(AppConfig.DefaultFile).Language); } catch { }
+                    try { T.Set(AppConfig.Load(Paths.ConfigFile).Language); } catch { }
                     MessageBox.Show(T.S("alreadyRunning"), "DeskFence");
                     return;
                 }
@@ -296,6 +296,36 @@ namespace DeskFence
             cx.Save(file);
             AppConfig cy = AppConfig.Load(file);
             Check(!cy.CleanExit && cy.Fences[0].Items[0].StoredPath == "q", "配置读写：收纳位置和退出状态");
+
+            // 11. 自定义存放文件夹：已收纳的文件整体搬过去
+            {
+                string oldStore = Path.Combine(dir, "s_old"), newStore = Path.Combine(dir, "s_new");
+                Directory.CreateDirectory(Path.Combine(oldStore, "h1"));
+                Directory.CreateDirectory(Path.Combine(oldStore, "h2", "资料夹"));
+                File.WriteAllText(Path.Combine(oldStore, "h1", "报表.xlsx"), "数据");
+                File.WriteAllText(Path.Combine(oldStore, "h2", "资料夹", "里面.txt"), "in");
+                AppConfig mc = new AppConfig(); FenceData mf = new FenceData(); mc.Fences.Add(mf);
+                ItemData m1 = new ItemData(); m1.Path = Path.Combine(dir, "desk", "报表.xlsx"); m1.StoredPath = Path.Combine(oldStore, "h1", "报表.xlsx");
+                ItemData m2 = new ItemData(); m2.Path = Path.Combine(dir, "desk", "资料夹"); m2.StoredPath = Path.Combine(oldStore, "h2", "资料夹");
+                ItemData m3 = new ItemData(); m3.Path = Path.Combine(dir, "desk", "没收纳.txt");
+                mf.Items.Add(m1); mf.Items.Add(m2); mf.Items.Add(m3);
+                List<string> mfail = Storage.MoveStoreTo(mc, newStore);
+                Check(mfail.Count == 0 && m1.StoredPath.StartsWith(newStore) && File.ReadAllText(m1.StoredPath) == "数据", "换存放文件夹：文件搬过去，内容不变");
+                Check(File.Exists(Path.Combine(m2.StoredPath, "里面.txt")), "换存放文件夹：文件夹整个搬过去");
+                Check(m3.StoredPath == null, "换存放文件夹：没收纳的不受影响");
+                Check(Directory.GetFileSystemEntries(oldStore).Length == 0, "换存放文件夹：旧文件夹清空");
+                Check(Storage.MoveStoreTo(mc, newStore).Count == 0 && m1.StoredPath.StartsWith(newStore), "换存放文件夹：重复执行不出错");
+                // 跨盘时的文件夹复制（这里用同盘模拟复制路径）
+                string cpSrc = Path.Combine(dir, "cp_src"), cpDst = Path.Combine(dir, "cp_dst");
+                Directory.CreateDirectory(Path.Combine(cpSrc, "a", "b"));
+                File.WriteAllText(Path.Combine(cpSrc, "a", "b", "c.txt"), "deep");
+                Storage.MoveAny(cpSrc, cpDst);
+                Check(!Directory.Exists(cpSrc) && File.ReadAllText(Path.Combine(cpDst, "a", "b", "c.txt")) == "deep", "移动文件夹：多层内容完整");
+                string saveDesk = DesktopHelper.UserDesktop;
+                DesktopHelper.UserDesktop = Path.Combine(dir, "desk");
+                Check(!Storage.IsValidStoreDir(Path.Combine(dir, "desk")) && !Storage.IsValidStoreDir(Path.Combine(dir, "desk", "sub")) && Storage.IsValidStoreDir(Path.Combine(dir, "desk2")), "存放文件夹不能放在桌面里");
+                DesktopHelper.UserDesktop = saveDesk;
+            }
 
             // 10. 配置文件开头说明：保存成功（旧版这里用了 .NET Framework 没有的方法，保存直接失败）
             {

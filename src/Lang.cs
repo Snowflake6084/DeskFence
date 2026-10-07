@@ -83,6 +83,33 @@ namespace DeskFence
             A("findResult", "找回 {0} 个文件，仍有 {1} 个找不到。\n\n存放文件夹：{2}",
                 "Found {0} file(s); {1} still missing.\n\nStorage folder: {2}",
                 "{0} 個のファイルを見つけました。{1} 個はまだ見つかりません。\n\n保管フォルダー：{2}");
+            A("locations", "文件位置", "File locations", "ファイルの場所");
+            A("storeDir", "存放文件夹：", "Storage folder: ", "保管フォルダー：");
+            A("configDir", "配置文件夹：", "Settings folder: ", "設定フォルダー：");
+            A("changeStore", "更改存放文件夹...", "Change storage folder...", "保管フォルダーを変更...");
+            A("changeConfig", "更改配置文件位置...", "Change settings location...", "設定ファイルの場所を変更...");
+            A("openLog", "打开日志文件夹", "Open log folder", "ログフォルダーを開く");
+            A("resetLocations", "恢复默认位置", "Restore default locations", "既定の場所に戻す");
+            A("pickStore", "选择存放收纳文件的文件夹", "Choose the folder that holds stored files", "収納したファイルを置くフォルダーを選択");
+            A("pickConfig", "选择保存配置文件（config.xml）的文件夹", "Choose the folder for the settings file (config.xml)", "設定ファイル（config.xml）を保存するフォルダーを選択");
+            A("storeInDesktop", "存放文件夹不能放在桌面里，否则收纳的文件会重新出现在桌面上。请换一个位置。",
+                "The storage folder can't be inside the desktop, or stored files would show up on the desktop again. Please choose another folder.",
+                "保管フォルダーをデスクトップ内に置くことはできません（収納したファイルがデスクトップに再表示されるため）。別の場所を選んでください。");
+            A("confirmStore", "把存放文件夹改为：\n{0}\n\n已收纳的文件会一起搬过去。继续吗？",
+                "Change the storage folder to:\n{0}\n\nFiles already stored will be moved there. Continue?",
+                "保管フォルダーを次に変更します：\n{0}\n\n収納済みのファイルも移動します。続けますか？");
+            A("crossDriveWarn", "注意：新位置和桌面不在同一个盘。以后每次收纳/放回都要真正复制文件，大文件或文件夹会慢一些。",
+                "Note: the new folder is on a different drive from the desktop. Storing and returning files will copy the data each time, which is slower for large files or folders.",
+                "注意：新しい場所はデスクトップと別のドライブです。収納・戻すたびに実際にコピーするため、大きなファイルやフォルダーは時間がかかります。");
+            A("storeChanged", "存放文件夹已改为：\n{0}", "Storage folder changed to:\n{0}", "保管フォルダーを変更しました：\n{0}");
+            A("storeSomeFailed", "以下文件没能搬过去（可能正在使用），仍在原来的文件夹 {1}，照常可用：\n{0}",
+                "These files couldn't be moved (maybe in use). They stay in the old folder {1} and still work:\n{0}",
+                "次のファイルは移動できませんでした（使用中の可能性）。元のフォルダー {1} に残り、そのまま使えます：\n{0}");
+            A("configExists", "目标位置已经有一个 config.xml：\n{0}\n\n要用当前设置覆盖它吗？",
+                "There is already a config.xml at:\n{0}\n\nOverwrite it with the current settings?",
+                "移動先に config.xml が既にあります：\n{0}\n\n現在の設定で上書きしますか？");
+            A("configChanged", "配置文件已移到：\n{0}", "Settings file moved to:\n{0}", "設定ファイルを移動しました：\n{0}");
+            A("moveFailed", "操作失败：", "Operation failed: ", "失敗しました：");
             A("openConfig", "打开配置文件夹", "Open settings folder", "設定フォルダーを開く");
             A("exit", "退出（收纳的文件放回桌面）", "Exit (stored files go back to desktop)", "終了（収納したファイルをデスクトップに戻す）");
             A("exitKeep", "退出（文件不恢复到桌面）", "Exit (keep files in fences)", "終了（ファイルをデスクトップに戻さない）");

@@ -18,7 +18,7 @@ namespace DeskFence
 
         public AppConfig Config;
         public float Scale = 1f;
-        readonly string configFile;
+        string configFile;
         readonly List<FenceForm> forms = new List<FenceForm>();
         readonly Control ui;
         NotifyIcon tray;
@@ -35,7 +35,7 @@ namespace DeskFence
 
         public Controller()
         {
-            configFile = AppConfig.DefaultFile;
+            configFile = Paths.ConfigFile;
             ui = new Control();
             ui.CreateControl();
             IntPtr h = ui.Handle; // 确保句柄在 UI 线程创建
@@ -576,14 +576,20 @@ namespace DeskFence
             m.Items.Add(hideTray);
 
             m.Items.Add(T.S("findMissing"), null, delegate { RelinkMissing(true); });
-            m.Items.Add(T.S("openStore"), null, delegate
-            {
-                try { Directory.CreateDirectory(Storage.Root); Process.Start("explorer.exe", "\"" + Storage.Root + "\""); } catch { }
-            });
-            m.Items.Add(T.S("openConfig"), null, delegate
-            {
-                try { Directory.CreateDirectory(AppConfig.DataDir); Process.Start("explorer.exe", "\"" + AppConfig.DataDir + "\""); } catch { }
-            });
+            ToolStripMenuItem loc = new ToolStripMenuItem(T.S("locations"));
+            ToolStripMenuItem storeInfo = new ToolStripMenuItem(T.S("storeDir") + Storage.Root); storeInfo.Enabled = false;
+            ToolStripMenuItem cfgInfo = new ToolStripMenuItem(T.S("configDir") + Paths.ConfigDir); cfgInfo.Enabled = false;
+            loc.DropDownItems.Add(storeInfo);
+            loc.DropDownItems.Add(T.S("openStore"), null, delegate { OpenFolder(Storage.Root); });
+            loc.DropDownItems.Add(T.S("changeStore"), null, delegate { ChangeStoreDir(); });
+            loc.DropDownItems.Add(new ToolStripSeparator());
+            loc.DropDownItems.Add(cfgInfo);
+            loc.DropDownItems.Add(T.S("openConfig"), null, delegate { OpenFolder(Paths.ConfigDir); });
+            loc.DropDownItems.Add(T.S("changeConfig"), null, delegate { ChangeConfigDir(); });
+            loc.DropDownItems.Add(new ToolStripSeparator());
+            loc.DropDownItems.Add(T.S("openLog"), null, delegate { OpenFolder(AppConfig.DataDir); });
+            loc.DropDownItems.Add(T.S("resetLocations"), null, delegate { ResetLocations(); });
+            m.Items.Add(loc);
 
             m.Items.Add(new ToolStripSeparator());
             m.Items.Add(T.S("exit"), null, delegate { Exit(true); });
@@ -636,6 +642,82 @@ namespace DeskFence
                 th.Start();
             }
             catch (Exception ex) { Log.Write("监听恢复托盘失败: " + ex.Message); }
+        }
+
+        static void OpenFolder(string d)
+        {
+            try { Directory.CreateDirectory(d); Process.Start("explorer.exe", "\"" + d + "\""); } catch { }
+        }
+
+        static string PickFolder(string title, string start)
+        {
+            using (FolderBrowserDialog dlg = new FolderBrowserDialog())
+            {
+                dlg.Description = title;
+                dlg.ShowNewFolderButton = true;
+                try { if (Directory.Exists(start)) dlg.SelectedPath = start; } catch { }
+                return dlg.ShowDialog() == DialogResult.OK ? dlg.SelectedPath : null;
+            }
+        }
+
+        /// <summary>更改存放文件夹：已收纳的文件一起搬过去</summary>
+        void ChangeStoreDir()
+        {
+            string d = PickFolder(T.S("pickStore"), Storage.Root);
+            if (d == null) return;
+            ApplyStoreDir(d);
+        }
+
+        void ApplyStoreDir(string d)
+        {
+            if (d != null && DesktopHelper.SamePath(d, Storage.Root)) return;
+            if (d != null && !Storage.IsValidStoreDir(d)) { MessageBox.Show(T.S("storeInDesktop"), "DeskFence", MessageBoxButtons.OK, MessageBoxIcon.Warning); return; }
+            string target = d ?? Storage.DefaultRoot;
+            string oldRoot = Storage.Root;
+            bool crossDrive = !string.Equals(Path.GetPathRoot(Path.GetFullPath(target)), Path.GetPathRoot(Path.GetFullPath(DesktopHelper.UserDesktop)), StringComparison.OrdinalIgnoreCase);
+            string ask = T.F("confirmStore", target) + (crossDrive ? "\n\n" + T.S("crossDriveWarn") : "");
+            if (MessageBox.Show(ask, "DeskFence", MessageBoxButtons.OKCancel, MessageBoxIcon.Question) != DialogResult.OK) return;
+            Cursor.Current = Cursors.WaitCursor;
+            List<string> failed;
+            try { failed = Storage.MoveStoreTo(Config, target); }
+            catch (Exception ex) { MessageBox.Show(T.S("moveFailed") + ex.Message, "DeskFence"); return; }
+            finally { Cursor.Current = Cursors.Default; }
+            try { Paths.SetStoreDir(d, oldRoot); } catch (Exception ex) { Log.Write("保存存放文件夹设置失败: " + ex.Message); }
+            Storage.ResetRoot();
+            Save();
+            RenderAll();
+            string msg = T.F("storeChanged", Storage.Root);
+            if (failed.Count > 0) msg += "\n\n" + T.F("storeSomeFailed", string.Join("\n", failed.ToArray()), oldRoot);
+            MessageBox.Show(msg, "DeskFence", MessageBoxButtons.OK, MessageBoxIcon.Information);
+        }
+
+        /// <summary>更改配置文件位置：把当前配置写到新位置，旧文件删掉</summary>
+        void ChangeConfigDir()
+        {
+            string d = PickFolder(T.S("pickConfig"), Paths.ConfigDir);
+            if (d == null) return;
+            ApplyConfigDir(d);
+        }
+
+        void ApplyConfigDir(string d)
+        {
+            string newFile = Path.Combine(d ?? AppConfig.DataDir, "config.xml");
+            if (DesktopHelper.SamePath(newFile, configFile)) return;
+            if (File.Exists(newFile) && MessageBox.Show(T.F("configExists", newFile), "DeskFence", MessageBoxButtons.OKCancel, MessageBoxIcon.Warning) != DialogResult.OK) return;
+            string oldFile = configFile;
+            try { Config.Save(newFile); }
+            catch (Exception ex) { MessageBox.Show(T.S("moveFailed") + ex.Message, "DeskFence"); return; }
+            try { Paths.SetConfigDir(d); }
+            catch (Exception ex) { MessageBox.Show(T.S("moveFailed") + ex.Message, "DeskFence"); return; }
+            configFile = newFile;
+            try { if (File.Exists(oldFile)) File.Delete(oldFile); } catch { }
+            MessageBox.Show(T.F("configChanged", newFile), "DeskFence", MessageBoxButtons.OK, MessageBoxIcon.Information);
+        }
+
+        void ResetLocations()
+        {
+            if (!string.IsNullOrEmpty(Paths.CustomStoreDir)) ApplyStoreDir(null);
+            if (!DesktopHelper.SamePath(configFile, AppConfig.DefaultFile)) ApplyConfigDir(null);
         }
 
         public void ShowOpacityDialog()
@@ -776,11 +858,11 @@ namespace DeskFence
                         for (int round = 0; round < 120; round++)
                         {
                             if (MainRunning()) return; // 主程序又被打开了，交给它
-                            AppConfig c = AppConfig.Load(AppConfig.DefaultFile);
+                            AppConfig c = AppConfig.Load(Paths.ConfigFile);
                             if (c.CleanExit) return;
                             List<string> failed = Storage.RestoreAll(c);
                             c.CleanExit = failed.Count == 0;
-                            try { c.Save(AppConfig.DefaultFile); } catch (Exception ex) { Log.Write("守护进程保存失败: " + ex.Message); }
+                            try { c.Save(Paths.ConfigFile); } catch (Exception ex) { Log.Write("守护进程保存失败: " + ex.Message); }
                             if (c.CleanExit)
                             {
                                 Log.Write("主程序意外退出，已把收纳的文件放回桌面");

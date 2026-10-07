@@ -17,6 +17,7 @@
 - **两种退出**："退出（文件放回桌面）"把收纳的文件放回桌面；"退出（文件不恢复到桌面）"让文件留在格子里。崩溃、关机、重启时文件不动，开机后照常显示
 - **拖动**：格子之间互相拖、格子内拖动排序、拖到微信等程序发送、拖出到桌面空白处放回桌面
 - **文件右键菜单**：和资源管理器一样（打开方式、发送到、复制、属性等），文件名太长时鼠标停留显示全名
+- **自定义位置**：存放文件夹和配置文件位置都可以改（日志固定在 `%APPDATA%\DeskFence`）
 - **界面语言**：中文 / English / 日本語
 - **其他**：开机自动启动、隐藏托盘图标（从格子右上角齿轮打开设置）、Win+D 显示桌面时格子不会被隐藏、高 DPI 屏幕适配
 
@@ -72,6 +73,7 @@ A lightweight desktop organizer for Windows: put a few translucent "fences" on y
 - **Two ways to exit**: "Exit (stored files go back to desktop)" returns stored files to the desktop; "Exit (keep files in fences)" leaves them stored. On a crash, shutdown or restart files stay stored and show up again at next start
 - **Drag and drop**: between fences, reorder inside a fence, drop onto other apps (e.g. a chat window) to send, or drag onto an empty desktop area to put it back on the desktop
 - **File context menu**: the same right-click menu as File Explorer (Open with, Send to, Copy, Properties…); hover to see the full name when it is cut off
+- **Custom locations**: choose where stored files and the settings file live (the log stays in `%APPDATA%\DeskFence`)
 - **UI languages**: 中文 / English / 日本語
 - **Also**: start with Windows, hide the tray icon (open settings from the gear button on any fence), fences stay visible on Win+D, high-DPI aware
 

@@ -158,10 +158,68 @@ namespace DeskFence
         {
             get
             {
-                if (root == null) root = PickRoot(DesktopHelper.UserDesktop);
+                if (root == null)
+                {
+                    string custom = Paths.CustomStoreDir;
+                    root = !string.IsNullOrEmpty(custom) ? custom : PickRoot(DesktopHelper.UserDesktop);
+                }
                 return root;
             }
             set { root = value; } // 测试用
+        }
+
+        public static string DefaultRoot { get { return PickRoot(DesktopHelper.UserDesktop); } }
+
+        /// <summary>重新按设置决定存放位置（改了自定义位置之后调用）</summary>
+        public static void ResetRoot() { root = null; }
+
+        /// <summary>
+        /// 把所有已收纳的文件搬到新的存放文件夹。返回没搬成功的文件名。
+        /// 同一个盘是瞬间改名；不同盘会真的复制再删除，大文件夹会慢一些。
+        /// </summary>
+        public static List<string> MoveStoreTo(AppConfig c, string newRoot)
+        {
+            List<string> failed = new List<string>();
+            Directory.CreateDirectory(newRoot);
+            foreach (FenceData f in c.Fences)
+                foreach (ItemData it in f.Items)
+                {
+                    if (!it.IsStored()) continue;
+                    string holder = System.IO.Path.GetDirectoryName(it.StoredPath);
+                    string name = System.IO.Path.GetFileName(it.StoredPath);
+                    string newHolder = System.IO.Path.Combine(newRoot, System.IO.Path.GetFileName(holder));
+                    if (DesktopHelper.SamePath(holder, newHolder)) continue;
+                    try
+                    {
+                        if (Directory.Exists(newHolder)) newHolder = System.IO.Path.Combine(newRoot, Guid.NewGuid().ToString("N"));
+                        Directory.CreateDirectory(newHolder);
+                        string dest = System.IO.Path.Combine(newHolder, name);
+                        MoveAny(it.StoredPath, dest);
+                        it.StoredPath = dest;
+                        try { if (Directory.GetFileSystemEntries(holder).Length == 0) Directory.Delete(holder); } catch { }
+                    }
+                    catch (Exception ex)
+                    {
+                        try { if (Directory.Exists(newHolder) && Directory.GetFileSystemEntries(newHolder).Length == 0) Directory.Delete(newHolder); } catch { }
+                        Log.Write("搬到新存放文件夹失败 " + it.StoredPath + ": " + ex.Message);
+                        failed.Add(DesktopHelper.DisplayName(it.Path));
+                    }
+                }
+            return failed;
+        }
+
+        /// <summary>存放文件夹不能放在桌面里（否则文件又出现在桌面上）</summary>
+        public static bool IsValidStoreDir(string d)
+        {
+            if (string.IsNullOrEmpty(d)) return false;
+            foreach (string desk in new string[] { DesktopHelper.UserDesktop, DesktopHelper.CommonDesktop })
+            {
+                if (string.IsNullOrEmpty(desk)) continue;
+                string a = System.IO.Path.GetFullPath(d).TrimEnd('\\', '/') + System.IO.Path.DirectorySeparatorChar;
+                string b = System.IO.Path.GetFullPath(desk).TrimEnd('\\', '/') + System.IO.Path.DirectorySeparatorChar;
+                if (a.StartsWith(b, StringComparison.OrdinalIgnoreCase)) return false;
+            }
+            return true;
         }
 
         static string PickRoot(string desktop)
@@ -201,8 +259,7 @@ namespace DeskFence
             {
                 Directory.CreateDirectory(dir);
                 string dest = System.IO.Path.Combine(dir, System.IO.Path.GetFileName(src.TrimEnd('\\', '/')));
-                if (Directory.Exists(src)) Directory.Move(src, dest);
-                else File.Move(src, dest);
+                MoveAny(src, dest);
                 it.StoredPath = dest;
                 return null;
             }
@@ -250,10 +307,26 @@ namespace DeskFence
             }
         }
 
-        static void MoveAny(string from, string to)
+        /// <summary>移动文件或文件夹；跨盘时文件夹先完整复制、再删除原文件夹</summary>
+        public static void MoveAny(string from, string to)
         {
-            if (Directory.Exists(from)) Directory.Move(from, to);
-            else File.Move(from, to);
+            if (!Directory.Exists(from)) { File.Move(from, to); return; }
+            string r1 = System.IO.Path.GetPathRoot(System.IO.Path.GetFullPath(from));
+            string r2 = System.IO.Path.GetPathRoot(System.IO.Path.GetFullPath(to));
+            if (string.Equals(r1, r2, StringComparison.OrdinalIgnoreCase)) { Directory.Move(from, to); return; }
+            try { CopyDir(from, to); }
+            catch { try { Directory.Delete(to, true); } catch { } throw; } // 复制没完成：删掉半成品，原文件不动
+            Directory.Delete(from, true);
+        }
+
+        static void CopyDir(string from, string to)
+        {
+            Directory.CreateDirectory(to);
+            new DirectoryInfo(to).Attributes = new DirectoryInfo(from).Attributes;
+            foreach (string f in Directory.GetFiles(from))
+                File.Copy(f, System.IO.Path.Combine(to, System.IO.Path.GetFileName(f)), false);
+            foreach (string d in Directory.GetDirectories(from))
+                CopyDir(d, System.IO.Path.Combine(to, System.IO.Path.GetFileName(d)));
         }
 
         public static string UniqueTarget(string p)
@@ -352,6 +425,8 @@ namespace DeskFence
         {
             List<string> l = new List<string>();
             l.Add(Root);
+            string prev = Paths.PreviousStoreDir;
+            if (!string.IsNullOrEmpty(prev)) l.Add(prev);
             try { l.Add(System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "DeskFence", "Store")); } catch { }
             if (DesktopHelper.UserDesktop.Length > 0) l.Add(System.IO.Path.Combine(DesktopHelper.UserDesktop, ".deskfence"));
             return l.ToArray();
@@ -370,6 +445,52 @@ namespace DeskFence
     class Utf8StringWriter : StringWriter
     {
         public override Encoding Encoding { get { return Encoding.UTF8; } }
+    }
+
+    /// <summary>
+    /// 自定义位置记在注册表 HKCU\Software\DeskFence（配置文件本身可能被挪走，所以不能记在配置文件里）。
+    /// 日志始终在 %APPDATA%\DeskFence\error.log。
+    /// </summary>
+    static class Paths
+    {
+        const string Key = @"Software\DeskFence";
+
+        static string Read(string name)
+        {
+            try
+            {
+                using (Microsoft.Win32.RegistryKey k = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(Key))
+                    return k == null ? null : k.GetValue(name) as string;
+            }
+            catch { return null; }
+        }
+
+        static void Write(string name, string value)
+        {
+            using (Microsoft.Win32.RegistryKey k = Microsoft.Win32.Registry.CurrentUser.CreateSubKey(Key))
+            {
+                if (string.IsNullOrEmpty(value)) { if (k.GetValue(name) != null) k.DeleteValue(name); }
+                else k.SetValue(name, value);
+            }
+        }
+
+        /// <summary>配置文件路径：自定义了就用自定义的文件夹，否则 %APPDATA%\DeskFence\config.xml</summary>
+        public static string ConfigFile
+        {
+            get
+            {
+                string d = Read("ConfigDir");
+                if (!string.IsNullOrEmpty(d)) return System.IO.Path.Combine(d, "config.xml");
+                return AppConfig.DefaultFile;
+            }
+        }
+
+        public static string ConfigDir { get { return System.IO.Path.GetDirectoryName(ConfigFile); } }
+        public static string CustomStoreDir { get { return Read("StoreDir"); } }
+        public static string PreviousStoreDir { get { return Read("PreviousStoreDir"); } }
+
+        public static void SetConfigDir(string d) { Write("ConfigDir", d); }
+        public static void SetStoreDir(string d, string previous) { Write("StoreDir", d); Write("PreviousStoreDir", previous); }
     }
 
     static class Log
