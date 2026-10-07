@@ -297,6 +297,30 @@ namespace DeskFence
             AppConfig cy = AppConfig.Load(file);
             Check(!cy.CleanExit && cy.Fences[0].Items[0].StoredPath == "q", "配置读写：收纳位置和退出状态");
 
+            // 9. 找回"已不存在"的项目
+            {
+                string rdesk = Path.Combine(dir, "rdesk"), rstore = Path.Combine(dir, "rstore");
+                Directory.CreateDirectory(Path.Combine(rstore, "g1"));
+                Directory.CreateDirectory(Path.Combine(rstore, "g2"));
+                Directory.CreateDirectory(rdesk);
+                File.WriteAllText(Path.Combine(rstore, "g1", "a.md"), "a");          // 在存放夹里，但记录丢了
+                Directory.CreateDirectory(Path.Combine(rstore, "g2", "文件夹"));       // 文件夹也能找回
+                File.WriteAllText(Path.Combine(rdesk, "b (2).xlsx"), "b");           // 被放回桌面时改了名
+                AppConfig rc = new AppConfig(); FenceData rf2 = new FenceData(); rc.Fences.Add(rf2);
+                ItemData x1 = new ItemData(); x1.Path = Path.Combine(rdesk, "a.md"); x1.StoredPath = Path.Combine(rstore, "gone", "a.md");
+                ItemData x2 = new ItemData(); x2.Path = Path.Combine(rdesk, "文件夹");
+                ItemData x3 = new ItemData(); x3.Path = Path.Combine(rdesk, "b.xlsx");
+                ItemData x4 = new ItemData(); x4.Path = Path.Combine(rdesk, "真的没了.txt");
+                rf2.Items.Add(x1); rf2.Items.Add(x2); rf2.Items.Add(x3); rf2.Items.Add(x4);
+                List<string> miss = new List<string>();
+                int got = Storage.Relink(rc, new string[] { rdesk }, new string[] { rstore }, miss);
+                Check(got == 3 && miss.Count == 1 && miss[0] == "真的没了.txt", "找回：3 个找到，1 个确实没了");
+                Check(x1.IsStored() && File.ReadAllText(x1.CurrentPath()) == "a", "找回：存放夹里的文件重新关联");
+                Check(x2.IsStored() && Directory.Exists(x2.CurrentPath()), "找回：存放夹里的文件夹重新关联");
+                Check(!x3.IsStored() && x3.Path.EndsWith("b (2).xlsx"), "找回：桌面上改了名的 (2)");
+                Check(Storage.Relink(rc, new string[] { rdesk }, new string[] { rstore }, null) == 0, "找回：再跑一次不会乱关联");
+            }
+
             // 8. 程序本身不能收进格子
             string appDir = Path.Combine(dir, "工具");
             Directory.CreateDirectory(appDir);

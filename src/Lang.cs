@@ -78,6 +78,11 @@ namespace DeskFence
             A("renameBadName", "文件名不能包含下列字符：\\ / : * ? \" < > |", "A file name can't contain any of these characters: \\ / : * ? \" < > |", "ファイル名に次の文字は使えません：\\ / : * ? \" < > |");
             A("renameExists", "已经有同名的文件了。", "A file with that name already exists.", "同じ名前のファイルが既にあります。");
             A("renameFailed", "重命名失败：", "Rename failed: ", "名前を変更できませんでした：");
+            A("findMissing", "查找丢失的文件（修复\"已不存在\"）", "Find missing files (fix \"missing\")", "見つからないファイルを探す");
+            A("openStore", "打开存放文件夹", "Open storage folder", "保管フォルダーを開く");
+            A("findResult", "找回 {0} 个文件，仍有 {1} 个找不到。\n\n存放文件夹：{2}",
+                "Found {0} file(s); {1} still missing.\n\nStorage folder: {2}",
+                "{0} 個のファイルを見つけました。{1} 個はまだ見つかりません。\n\n保管フォルダー：{2}");
             A("openConfig", "打开配置文件夹", "Open settings folder", "設定フォルダーを開く");
             A("exit", "退出（收纳的文件放回桌面）", "Exit (stored files go back to desktop)", "終了（収納したファイルをデスクトップに戻す）");
             A("exitKeep", "退出（文件不恢复到桌面）", "Exit (keep files in fences)", "終了（ファイルをデスクトップに戻さない）");

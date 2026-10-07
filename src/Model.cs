@@ -256,6 +256,90 @@ namespace DeskFence
         }
 
         /// <summary>放回所有收纳的文件，返回没放回去的文件名</summary>
+        /// <summary>
+        /// 找回"已不存在"的项目：按文件名到存放文件夹、桌面（含 "名字 (2)" 这类改名后的）里找，找到就重新关联。
+        /// 返回找回的数量；missing 输出仍然找不到的文件名。只改记录，不移动文件。
+        /// </summary>
+        public static int Relink(AppConfig c, string[] desktops, string[] storeRoots, List<string> missing)
+        {
+            HashSet<string> used = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (FenceData f in c.Fences)
+                foreach (ItemData it in f.Items)
+                {
+                    string cur = it.CurrentPath();
+                    if (DesktopHelper.Exists(cur)) used.Add(Norm(cur));
+                }
+            int found = 0;
+            foreach (FenceData f in c.Fences)
+                foreach (ItemData it in f.Items)
+                {
+                    if (DesktopHelper.Exists(it.CurrentPath())) continue;
+                    string name = System.IO.Path.GetFileName((it.Path ?? "").TrimEnd('\\', '/'));
+                    if (string.IsNullOrEmpty(name)) continue;
+                    string hit = null;
+                    DateTime best = DateTime.MinValue;
+                    // 1) 存放文件夹：Store\<随机>\文件名
+                    foreach (string root in storeRoots)
+                    {
+                        if (string.IsNullOrEmpty(root) || !Directory.Exists(root)) continue;
+                        string[] dirs;
+                        try { dirs = Directory.GetDirectories(root); } catch { continue; }
+                        foreach (string d in dirs)
+                        {
+                            string p = System.IO.Path.Combine(d, name);
+                            if (!DesktopHelper.Exists(p) || used.Contains(Norm(p))) continue;
+                            DateTime t = DateTime.MinValue;
+                            try { t = Directory.Exists(p) ? Directory.GetLastWriteTime(p) : File.GetLastWriteTime(p); } catch { }
+                            if (hit == null || t > best) { hit = p; best = t; }
+                        }
+                    }
+                    if (hit != null)
+                    {
+                        it.StoredPath = hit;
+                        used.Add(Norm(hit));
+                        found++;
+                        continue;
+                    }
+                    // 2) 桌面：原名，或放回时改成的 "名字 (2)"
+                    string stem = System.IO.Path.GetFileNameWithoutExtension(name), ext = System.IO.Path.GetExtension(name);
+                    foreach (string desk in desktops)
+                    {
+                        if (string.IsNullOrEmpty(desk) || !Directory.Exists(desk)) continue;
+                        for (int n = 1; n <= 30 && hit == null; n++)
+                        {
+                            string cand = n == 1 ? System.IO.Path.Combine(desk, name) : System.IO.Path.Combine(desk, stem + " (" + n + ")" + ext);
+                            if (DesktopHelper.Exists(cand) && !used.Contains(Norm(cand))) hit = cand;
+                        }
+                        if (hit != null) break;
+                    }
+                    if (hit != null)
+                    {
+                        it.Path = hit;
+                        it.StoredPath = null;
+                        used.Add(Norm(hit));
+                        found++;
+                        continue;
+                    }
+                    if (missing != null) missing.Add(DesktopHelper.DisplayName(it.Path));
+                }
+            return found;
+        }
+
+        static string Norm(string p)
+        {
+            try { return System.IO.Path.GetFullPath(p).TrimEnd('\\', '/'); } catch { return p; }
+        }
+
+        /// <summary>可能存放过文件的所有位置（新旧版本、桌面在不同盘时）</summary>
+        public static string[] AllStoreRoots()
+        {
+            List<string> l = new List<string>();
+            l.Add(Root);
+            try { l.Add(System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "DeskFence", "Store")); } catch { }
+            if (DesktopHelper.UserDesktop.Length > 0) l.Add(System.IO.Path.Combine(DesktopHelper.UserDesktop, ".deskfence"));
+            return l.ToArray();
+        }
+
         public static List<string> RestoreAll(AppConfig c)
         {
             List<string> failed = new List<string>();

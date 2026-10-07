@@ -69,6 +69,7 @@ namespace DeskFence
                         Config.Fences.Add(f);
                     }
                     MigrateAndReconcile();
+                    RelinkMissing(false);
                     if (Config.HideDesktopIcons) CollectAll(false);
                     Config.CleanExit = false;
                     Save();
@@ -165,8 +166,7 @@ namespace DeskFence
                         it.HiddenByUs = false;
                         it.AddedSystem = false;
                     }
-                    if (!string.IsNullOrEmpty(it.StoredPath) && !DesktopHelper.Exists(it.StoredPath))
-                        it.StoredPath = null;
+                    // 注意：存放位置找不到时不再清空记录（留给"查找丢失的文件"用）
                 }
             // 程序自己被收进了格子（旧版允许这样做）：放回桌面并移出格子，否则开机自启找不到它
             foreach (FenceData f in Config.Fences)
@@ -181,6 +181,27 @@ namespace DeskFence
                     pendingNotice = T.S("selfReleased");
                 }
             Native.RefreshDesktop();
+        }
+
+        /// <summary>找回"已不存在"的项目。showResult=true 时弹窗告诉结果。</summary>
+        void RelinkMissing(bool showResult)
+        {
+            List<string> missing = new List<string>();
+            int found = 0;
+            try
+            {
+                found = Storage.Relink(Config, new string[] { DesktopHelper.UserDesktop, DesktopHelper.CommonDesktop }, Storage.AllStoreRoots(), missing);
+            }
+            catch (Exception ex) { Log.Write("查找丢失文件出错: " + ex); }
+            if (found > 0 || missing.Count > 0)
+                Log.Write("查找丢失文件：找回 " + found + " 个，仍找不到 " + missing.Count + " 个" + (missing.Count > 0 ? "：" + string.Join(", ", missing.ToArray()) : ""));
+            if (found > 0) { Save(); if (forms.Count > 0) { if (Config.HideDesktopIcons) CollectAll(true); RenderAll(); } }
+            if (showResult)
+            {
+                string msg = T.F("findResult", found, missing.Count, Storage.Root);
+                if (missing.Count > 0) msg += "\n\n" + string.Join("\n", missing.ToArray());
+                MessageBox.Show(msg, "DeskFence", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            }
         }
 
         /// <summary>本程序 exe 当前的真实路径（启动后如果被挪动过，会在这里更新）</summary>
@@ -554,6 +575,11 @@ namespace DeskFence
             hideTray.Click += delegate { SetTrayHidden(!Config.HideTray); };
             m.Items.Add(hideTray);
 
+            m.Items.Add(T.S("findMissing"), null, delegate { RelinkMissing(true); });
+            m.Items.Add(T.S("openStore"), null, delegate
+            {
+                try { Directory.CreateDirectory(Storage.Root); Process.Start("explorer.exe", "\"" + Storage.Root + "\""); } catch { }
+            });
             m.Items.Add(T.S("openConfig"), null, delegate
             {
                 try { Directory.CreateDirectory(AppConfig.DataDir); Process.Start("explorer.exe", "\"" + AppConfig.DataDir + "\""); } catch { }
