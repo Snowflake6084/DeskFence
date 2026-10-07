@@ -80,16 +80,17 @@ namespace DeskFence
             A("renameFailed", "重命名失败：", "Rename failed: ", "名前を変更できませんでした：");
             A("openConfig", "打开配置文件夹", "Open settings folder", "設定フォルダーを開く");
             A("exit", "退出（收纳的文件放回桌面）", "Exit (stored files go back to desktop)", "終了（収納したファイルをデスクトップに戻す）");
-            A("collectMode", "收纳桌面文件（移入格子，退出时放回桌面）", "Store desktop files in fences (returned to desktop on exit)", "デスクトップのファイルを収納（終了時にデスクトップに戻す）");
+            A("exitKeep", "退出（文件不恢复到桌面）", "Exit (keep files in fences)", "終了（ファイルをデスクトップに戻さない）");
+            A("collectMode", "收纳桌面文件（移入格子）", "Store desktop files in fences", "デスクトップのファイルを収納");
             A("cantCollect", "以下文件正在使用或没有权限，暂时留在桌面（关闭后会自动收进来）：\n{0}",
                 "These files are in use or not accessible and stay on the desktop for now (stored automatically once closed):\n{0}",
                 "次のファイルは使用中またはアクセス権がないため、デスクトップに残ります（閉じると自動で収納されます）：\n{0}");
             A("cantRelease", "以下文件正在使用，无法放回桌面，请先关闭它：\n{0}",
                 "These files are in use and can't be moved back to the desktop. Close them first:\n{0}",
                 "次のファイルは使用中のためデスクトップに戻せません。先に閉じてください：\n{0}");
-            A("restoreLater", "以下文件正在使用，关闭后会自动放回桌面：\n{0}",
-                "These files are in use; they will go back to the desktop automatically once closed:\n{0}",
-                "次のファイルは使用中です。閉じると自動でデスクトップに戻ります：\n{0}");
+            A("restoreLater", "以下文件正在使用，没能放回桌面，仍在存放文件夹里（下次启动 DeskFence 会照常显示在格子里）：\n{0}",
+                "These files are in use and couldn't be moved back to the desktop. They stay in the storage folder and will show in the fences next time DeskFence starts:\n{0}",
+                "次のファイルは使用中のためデスクトップに戻せませんでした。保管フォルダーに残り、次回 DeskFence 起動時にボックスに表示されます：\n{0}");
             A("exitRestore", "退出并把收纳的图标放回桌面", "Exit and show stored icons on desktop", "終了してアイコンをデスクトップに戻す");
         }
 

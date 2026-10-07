@@ -196,6 +196,8 @@ namespace DeskFence
             Check(c2.BgAlphaPercent == 60 && c2.Fences.Count == 1, "配置读写：基本字段");
             Check(c2.Language == "ja" && c2.AllAlphaPercent == 80, "配置读写：语言和整体透明度");
             Check(c2.HideTray, "配置读写：隐藏托盘");
+            string savedText = File.ReadAllText(file);
+            Check(savedText.Contains("<!--") && savedText.Contains(Storage.Root) && savedText.StartsWith("<?xml") && savedText.Contains("encoding=\"utf-8\""), "配置文件：开头有存放位置说明");
             FenceData f2 = c2.Fences[0];
             Check(f2.Title == f.Title && f2.X == -1500 && f2.W == 333 && f2.H == 444, "配置读写：位置/名称(含特殊字符)");
             Check(f2.Locked && f2.ListMode && f2.Collapsed && f2.Id == f.Id, "配置读写：锁定/模式/折叠/Id");

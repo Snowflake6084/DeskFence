@@ -14,7 +14,7 @@
 - **半透明**：背景不透明度、整体不透明度两个滑块，实时生效
 - **两种显示模式**：图标模式 / 列表模式，标题栏一键切换
 - **收纳文件**：把桌面文件、快捷方式、文件夹直接拖进格子，桌面上就不再显示
-- **自动解散**：退出程序、关机、重启时文件自动放回桌面（开机后再自动收回）；程序崩溃或被结束时，后台守护进程也会把文件放回去
+- **两种退出**："退出（文件放回桌面）"把收纳的文件放回桌面；"退出（文件不恢复到桌面）"让文件留在格子里。崩溃、关机、重启时文件不动，开机后照常显示
 - **拖动**：格子之间互相拖、格子内拖动排序、拖到微信等程序发送、拖出到桌面空白处放回桌面
 - **文件右键菜单**：和资源管理器一样（打开方式、发送到、复制、属性等），文件名太长时鼠标停留显示全名
 - **界面语言**：中文 / English / 日本語
@@ -45,7 +45,7 @@
 | 文件 | 内容 |
 |---|---|
 | `src/Program.cs` | 入口、单实例、输入框、自测 |
-| `src/Controller.cs` | 托盘、格子管理、收纳/放回、守护进程 |
+| `src/Controller.cs` | 托盘、格子管理、收纳/放回 |
 | `src/FenceForm.cs` | 格子窗口的绘制、鼠标、拖放 |
 | `src/Model.cs` | 配置、文件收纳存放、布局计算 |
 | `src/IconCache.cs` | 读取系统文件图标 |
@@ -69,7 +69,7 @@ A lightweight desktop organizer for Windows: put a few translucent "fences" on y
 - **Translucency**: separate sliders for background opacity and overall opacity, applied live
 - **Two views**: icon view / list view, toggled from the title bar
 - **Store files**: drag desktop files, shortcuts or folders into a fence and they no longer appear on the desktop
-- **Auto release**: on exit, shutdown or restart, stored files are moved back to the desktop (and stored again after startup); if the app crashes or is killed, a background watchdog moves them back
+- **Two ways to exit**: "Exit (stored files go back to desktop)" returns stored files to the desktop; "Exit (keep files in fences)" leaves them stored. On a crash, shutdown or restart files stay stored and show up again at next start
 - **Drag and drop**: between fences, reorder inside a fence, drop onto other apps (e.g. a chat window) to send, or drag onto an empty desktop area to put it back on the desktop
 - **File context menu**: the same right-click menu as File Explorer (Open with, Send to, Copy, Properties…); hover to see the full name when it is cut off
 - **UI languages**: 中文 / English / 日本語
@@ -85,7 +85,7 @@ See `README.txt` in the zip for detailed usage (in Chinese).
 
 ### How it works
 
-- Stored files are moved from the desktop to `%LOCALAPPDATA%\DeskFence\Store` (same drive as the desktop, so it is a rename, not a copy) and moved back on exit. If a file with the same name already exists on the desktop, the returned file is renamed to "name (2)" instead of overwriting
+- Stored files are moved from the desktop to `%LOCALAPPDATA%\DeskFence\Store` (same drive as the desktop, so it is a rename, not a copy) and moved back when you choose "Exit (stored files go back to desktop)". The exact folder is written in a comment at the top of `%APPDATA%\DeskFence\config.xml`. If a file with the same name already exists on the desktop, the returned file is renamed to "name (2)" instead of overwriting
 - Files that are currently open (e.g. a workbook open in Excel) can't be moved; they stay on the desktop and are stored automatically once closed
 - `DeskFence.exe` itself can't be stored in a fence (auto start would no longer find it); store a shortcut to it instead
 - Shortcuts on the Public Desktop need administrator rights to move and therefore stay on the desktop

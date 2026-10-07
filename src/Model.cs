@@ -117,8 +117,26 @@ namespace DeskFence
             if (!Directory.Exists(dir)) Directory.CreateDirectory(dir);
             string tmp = file + ".tmp";
             XmlSerializer xs = new XmlSerializer(typeof(AppConfig));
-            using (StreamWriter sw = new StreamWriter(tmp, false, new UTF8Encoding(false)))
+            string xml;
+            using (StringWriter sw = new Utf8StringWriter())
+            {
                 xs.Serialize(sw, this);
+                xml = sw.ToString();
+            }
+            // 在开头写一段说明：收纳的桌面文件实际存放在哪里
+            string note =
+                "\r\n<!--\r\n" +
+                "  DeskFence 配置文件\r\n" +
+                "  收纳进格子的桌面文件，实际存放位置：\r\n" +
+                "    " + Storage.Root + "\r\n" +
+                "  每个文件放在一个随机名字的子文件夹里，文件名保持不变。\r\n" +
+                "  下面每个 ItemData 里：Path = 文件原来在桌面上的位置；StoredPath = 现在实际所在的位置（为空表示没有收纳，还在原处）。\r\n" +
+                "  想把文件拿回桌面：托盘/齿轮菜单选\"退出（文件放回桌面）\"，或在格子里右键文件选\"移出格子\"，\r\n" +
+                "  也可以直接到上面的文件夹里把文件剪切出来。\r\n" +
+                "-->";
+            int decl = xml.IndexOf("?>");
+            xml = decl >= 0 ? xml.Substring(0, decl + 2) + note + xml.Substring(decl + 2) : note.TrimStart() + "\r\n" + xml;
+            File.WriteAllText(tmp, xml, new UTF8Encoding(false));
             if (File.Exists(file))
             {
                 try { File.Replace(tmp, file, null); return; }
@@ -246,6 +264,11 @@ namespace DeskFence
                     if (Restore(it) != null) failed.Add(DesktopHelper.DisplayName(it.Path));
             return failed;
         }
+    }
+
+    class Utf8StringWriter : StringWriter
+    {
+        public override Encoding Encoding { get { return Encoding.UTF8; } }
     }
 
     static class Log

@@ -80,7 +80,7 @@ namespace DeskFence
             foreach (FenceData f in Config.Fences) ShowFence(f);
             BuildTray();
             StartWatchers();
-            StartWatchdog();
+            // 不再启动守护进程：程序崩溃/卡死被结束时，文件留在格子里，下次启动照常显示
             if (pendingNotice != null)
             {
                 if (Config.HideTray) MessageBox.Show(pendingNotice, "DeskFence", MessageBoxButtons.OK, MessageBoxIcon.Information);
@@ -147,30 +147,10 @@ namespace DeskFence
         /// </summary>
         public void OnSessionEnding()
         {
+            // 关机/重启/注销：文件留在格子里（存放文件夹），开机后 DeskFence 自动启动照常显示
             if (sessionEnding || exiting) return;
             sessionEnding = true;
-            try
-            {
-                List<string> failed = Storage.RestoreAll(Config);
-                Config.CleanExit = failed.Count == 0;
-                Save();
-                if (failed.Count > 0) Log.Write("关机时有文件没放回桌面（正被占用）: " + string.Join(", ", failed.ToArray()));
-                RenderAll();
-            }
-            catch (Exception ex) { Log.Write("关机放回文件出错: " + ex.Message); }
-            // 如果关机被取消了，程序还在运行：1 分钟后恢复收纳
-            Timer t = new Timer();
-            t.Interval = 60000;
-            t.Tick += delegate
-            {
-                t.Stop(); t.Dispose();
-                sessionEnding = false;
-                Config.CleanExit = false;
-                if (Config.HideDesktopIcons) CollectAll(true);
-                Save();
-                RenderAll();
-            };
-            t.Start();
+            Save();
         }
 
         /// <summary>旧版（隐藏属性方式）迁移；修正记录与实际文件不一致的地方</summary>
@@ -580,7 +560,8 @@ namespace DeskFence
             });
 
             m.Items.Add(new ToolStripSeparator());
-            m.Items.Add(T.S("exit"), null, delegate { Exit(); });
+            m.Items.Add(T.S("exit"), null, delegate { Exit(true); });
+            m.Items.Add(T.S("exitKeep"), null, delegate { Exit(false); });
         }
 
         /// <summary>格子标题栏的齿轮按钮：弹出和托盘右键一样的设置菜单</summary>
@@ -698,17 +679,16 @@ namespace DeskFence
             }
         }
 
-        /// <summary>退出：所有收纳的文件放回桌面（格子的布局保留，下次启动再收回来）</summary>
-        void Exit()
+        /// <summary>退出。restore=true：收纳的文件放回桌面（下次启动再收回来）；false：文件留在存放文件夹</summary>
+        void Exit(bool restore)
         {
             exiting = true;
             if (retryTimer != null) retryTimer.Stop();
             if (winEventHook != IntPtr.Zero) { try { Native.UnhookWinEvent(winEventHook); } catch { } winEventHook = IntPtr.Zero; }
             foreach (FileSystemWatcher w in watchers) { try { w.EnableRaisingEvents = false; w.Dispose(); } catch { } }
-            List<string> failed = Storage.RestoreAll(Config);
-            Native.RefreshDesktop();
-            // 有文件正被占用没放回去时，CleanExit 保持 false，守护进程会继续重试
-            Config.CleanExit = failed.Count == 0;
+            List<string> failed = restore ? Storage.RestoreAll(Config) : new List<string>();
+            if (restore) Native.RefreshDesktop();
+            Config.CleanExit = true;
             Save();
             if (failed.Count > 0)
                 MessageBox.Show(T.F("restoreLater", string.Join("\n", failed.ToArray())), "DeskFence");
