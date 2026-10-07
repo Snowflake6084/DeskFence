@@ -73,6 +73,11 @@ namespace DeskFence
             A("selfReleased", "已把 DeskFence 程序放回桌面：程序本身放在格子里会导致开机无法自动启动。",
                 "DeskFence was moved back to the desktop: storing the program itself in a fence breaks auto start.",
                 "DeskFence をデスクトップに戻しました：本体をボックスに入れると自動起動できなくなります。");
+            A("renameFile", "重命名", "Rename", "名前の変更");
+            A("renamePrompt", "新文件名：", "New file name:", "新しいファイル名：");
+            A("renameBadName", "文件名不能包含下列字符：\\ / : * ? \" < > |", "A file name can't contain any of these characters: \\ / : * ? \" < > |", "ファイル名に次の文字は使えません：\\ / : * ? \" < > |");
+            A("renameExists", "已经有同名的文件了。", "A file with that name already exists.", "同じ名前のファイルが既にあります。");
+            A("renameFailed", "重命名失败：", "Rename failed: ", "名前を変更できませんでした：");
             A("openConfig", "打开配置文件夹", "Open settings folder", "設定フォルダーを開く");
             A("exit", "退出（收纳的文件放回桌面）", "Exit (stored files go back to desktop)", "終了（収納したファイルをデスクトップに戻す）");
             A("collectMode", "收纳桌面文件（移入格子，退出时放回桌面）", "Store desktop files in fences (returned to desktop on exit)", "デスクトップのファイルを収納（終了時にデスクトップに戻す）");

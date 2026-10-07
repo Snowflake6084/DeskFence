@@ -139,6 +139,8 @@ namespace DeskFence
                 {
                     FenceForm f = new FenceForm(app, cfg.Fences[i]);
                     using (Bitmap bm = f.Preview(hov[i], drop[i])) { g.DrawImage(bm, x, 20); x += bm.Width + 15; }
+                    bool[] tf = f.TruncatedFlags();
+                    for (int k = 0; k < tf.Length; k++) Console.WriteLine("fence" + i + (cfg.Fences[i].ListMode ? "(列表) " : "(图标) ") + DesktopHelper.DisplayName(cfg.Fences[i].Items[k].Path) + " => " + (tf[k] ? "显示全名提示" : "完整显示"));
                 }
                 canvas.Save(outFile, System.Drawing.Imaging.ImageFormat.Png);
             }

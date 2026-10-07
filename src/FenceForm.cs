@@ -197,6 +197,7 @@ namespace DeskFence
 
         protected override void WndProc(ref Message m)
         {
+            if (activeShellMenu != null && activeShellMenu.HandleMessage(ref m)) return;
             if (m.Msg == Native.WM_WINDOWPOSCHANGING)
             {
                 try
@@ -509,6 +510,7 @@ namespace DeskFence
                     DrawImage(g, ic, ir, ia);
                     Rectangle tr = new Rectangle(ir.Right + L.R(7), r.Y, r.Right - ir.Right - L.R(12), r.Height);
                     DrawText(g, name, itemFont, tr, StringAlignment.Near, StringAlignment.Center, tc, true);
+                    MarkTruncated(i, g.MeasureString(name, itemFont).Width > tr.Width);
                 }
                 else
                 {
@@ -518,9 +520,56 @@ namespace DeskFence
                     DrawImage(g, ic, ir, ia);
                     Rectangle tr = new Rectangle(r.X + L.R(3), ir.Bottom + L.R(3), r.Width - L.R(6), r.Bottom - ir.Bottom - L.R(4));
                     DrawText(g, name, itemFont, tr, StringAlignment.Center, StringAlignment.Near, tc, true);
+                    SizeF need = g.MeasureString(name, itemFont, tr.Width);
+                    MarkTruncated(i, need.Height > tr.Height + 1 || need.Width > tr.Width + 1);
                 }
             }
             finally { if (ia != null) ia.Dispose(); }
+        }
+
+        // ================= 文件名太长时：鼠标停留显示全名 =================
+
+        bool[] truncated = new bool[0];
+        ToolTip nameTip;
+        Timer tipTimer;
+        int tipShownFor = -1;
+
+        public bool[] TruncatedFlags() { return (bool[])truncated.Clone(); }
+
+        void MarkTruncated(int i, bool t)
+        {
+            if (truncated.Length != Data.Items.Count) truncated = new bool[Data.Items.Count];
+            if (i >= 0 && i < truncated.Length) truncated[i] = t;
+        }
+
+        void HideNameTip()
+        {
+            if (tipTimer != null) tipTimer.Stop();
+            if (nameTip != null && tipShownFor >= 0) { try { nameTip.Hide(this); } catch { } }
+            tipShownFor = -1;
+        }
+
+        void ScheduleNameTip()
+        {
+            HideNameTip();
+            if (hover < 0) return;
+            if (tipTimer == null)
+            {
+                tipTimer = new Timer();
+                tipTimer.Interval = 450;
+                tipTimer.Tick += delegate
+                {
+                    tipTimer.Stop();
+                    int i = hover;
+                    if (i < 0 || i >= Data.Items.Count || i >= truncated.Length || !truncated[i] || mode != Mode.None) return;
+                    if (nameTip == null) { nameTip = new ToolTip(); nameTip.ShowAlways = true; }
+                    string full = DesktopHelper.DisplayName(Data.Items[i].Path);
+                    if (!DesktopHelper.Exists(Data.Items[i].CurrentPath())) full += T.S("missing");
+                    Point p = PointToClient(Cursor.Position);
+                    try { nameTip.Show(full, this, p.X + L.R(14), p.Y + L.R(18), 10000); tipShownFor = i; } catch { }
+                };
+            }
+            tipTimer.Start();
         }
 
         static void DrawImage(Graphics g, Bitmap b, Rectangle r, ImageAttributes ia)
@@ -567,6 +616,7 @@ namespace DeskFence
         protected override void OnMouseDown(MouseEventArgs e)
         {
             base.OnMouseDown(e);
+            HideNameTip();
             if (e.Button != MouseButtons.Left) return;
             downScreen = Cursor.Position;
             downBounds = Bounds;
@@ -632,9 +682,11 @@ namespace DeskFence
             int hi = Data.Collapsed ? -1 : L.HitItem(e.Location);
             if (hb != hoverButton || hi != hover)
             {
+                bool itemChanged = hi != hover;
                 hoverButton = hb;
                 hover = hi;
                 Render();
+                if (itemChanged) ScheduleNameTip();
             }
         }
 
@@ -666,6 +718,7 @@ namespace DeskFence
         protected override void OnMouseLeave(EventArgs e)
         {
             base.OnMouseLeave(e);
+            HideNameTip();
             if (hover != -1 || hoverButton != -1) { hover = -1; hoverButton = -1; Render(); }
         }
 
@@ -682,6 +735,7 @@ namespace DeskFence
         protected override void OnMouseWheel(MouseEventArgs e)
         {
             base.OnMouseWheel(e);
+            HideNameTip();
             if (Data.Collapsed) return;
             SyncLayout();
             int old = L.Scroll;
@@ -746,11 +800,112 @@ namespace DeskFence
             ShowMenu(m);
         }
 
+        ShellMenu activeShellMenu;
+
         void ShowItemMenu(int idx)
         {
             ItemData it = Data.Items[idx];
+            HideNameTip();
+            string cur = it.CurrentPath();
+            if (DesktopHelper.Exists(cur))
+            {
+                try { ShowShellMenu(it, cur); return; }
+                catch (Exception ex) { Log.Write("系统右键菜单失败，改用简单菜单: " + ex.Message); }
+            }
+            ShowSimpleItemMenu(it);
+        }
+
+        /// <summary>和资源管理器一样的文件右键菜单，最上面加本程序的几项</summary>
+        void ShowShellMenu(ItemData it, string cur)
+        {
+            const uint ID_REMOVE = 1, ID_LOCATION = 2;
+            bool shift = (ModifierKeys & Keys.Shift) != 0; // 按住 Shift 右键 = 扩展菜单，和资源管理器一样
+            using (ShellMenu sm = new ShellMenu(cur, Handle, shift))
+            {
+                ShellMenu.AppendMenu(sm.HMenu, ShellMenu.MF_STRING, new UIntPtr(ID_REMOVE), T.S("removeItem"));
+                if (!it.IsStored())
+                    ShellMenu.AppendMenu(sm.HMenu, ShellMenu.MF_STRING, new UIntPtr(ID_LOCATION), T.S("openLocation"));
+                ShellMenu.AppendMenu(sm.HMenu, ShellMenu.MF_SEPARATOR, UIntPtr.Zero, null);
+                sm.AddShellItems();
+
+                Point pt = Cursor.Position;
+                uint cmd;
+                activeShellMenu = sm;
+                try { cmd = sm.Track(Handle, pt.X, pt.Y); }
+                finally { activeShellMenu = null; }
+                if (cmd == 0) return;
+
+                if (cmd == ID_REMOVE) { selected = hover = -1; app.RemoveItem(this, it); return; }
+                if (cmd == ID_LOCATION)
+                {
+                    try { Process.Start("explorer.exe", "/select,\"" + cur + "\""); }
+                    catch (Exception ex) { MessageBox.Show(ex.Message, "DeskFence"); }
+                    return;
+                }
+                if (cmd < ShellMenu.FirstShellId) return;
+
+                string verb = sm.VerbOf(cmd).ToLowerInvariant();
+                if (verb == "rename") { RenameItem(it); return; } // 系统的"重命名"只在资源管理器窗口里有效，这里自己做
+                try { sm.Invoke(cmd, Handle, System.IO.Path.GetDirectoryName(cur)); }
+                catch (Exception ex) { Log.Write("执行菜单命令失败: " + ex.Message); }
+            }
+            // 删除、剪切等命令执行后文件可能不在了：稍后检查，不在了就从格子里去掉
+            Timer t = new Timer();
+            t.Interval = 1500;
+            t.Tick += delegate
+            {
+                t.Stop(); t.Dispose();
+                if (!Data.Items.Contains(it)) return;
+                if (!DesktopHelper.Exists(it.CurrentPath()))
+                {
+                    Data.Items.Remove(it);
+                    selected = hover = -1;
+                    app.Save();
+                }
+                IconCache.Invalidate(it.CurrentPath());
+                Render();
+            };
+            t.Start();
+        }
+
+        /// <summary>重命名格子里的文件（收纳中的文件，放回桌面时也用新名字）</summary>
+        void RenameItem(ItemData it)
+        {
+            string cur = it.CurrentPath();
+            string oldName = System.IO.Path.GetFileName(cur.TrimEnd('\\', '/'));
+            string ext = System.IO.Path.GetExtension(oldName);
+            bool hideExt = ext.Equals(".lnk", StringComparison.OrdinalIgnoreCase) || ext.Equals(".url", StringComparison.OrdinalIgnoreCase);
+            string shown = hideExt ? System.IO.Path.GetFileNameWithoutExtension(oldName) : oldName;
+            string s = InputDialog.Ask(T.S("renamePrompt"), shown, Cursor.Position);
+            if (s == null) return;
+            s = s.Trim();
+            if (s.Length == 0 || s == shown) return;
+            if (s.IndexOfAny(System.IO.Path.GetInvalidFileNameChars()) >= 0) { MessageBox.Show(T.S("renameBadName"), "DeskFence"); return; }
+            if (hideExt && !s.EndsWith(ext, StringComparison.OrdinalIgnoreCase)) s += ext;
+            string target = System.IO.Path.Combine(System.IO.Path.GetDirectoryName(cur), s);
+            try
+            {
+                if (DesktopHelper.Exists(target) && !DesktopHelper.SamePath(target, cur)) { MessageBox.Show(T.S("renameExists"), "DeskFence"); return; }
+                if (System.IO.Directory.Exists(cur)) System.IO.Directory.Move(cur, target);
+                else System.IO.File.Move(cur, target);
+                IconCache.Invalidate(cur);
+                if (it.IsStoredPathOf(cur))
+                {
+                    it.StoredPath = target;
+                    it.Path = System.IO.Path.Combine(System.IO.Path.GetDirectoryName(it.Path), s);
+                }
+                else it.Path = target;
+                app.Save();
+                Render();
+            }
+            catch (Exception ex) { MessageBox.Show(T.S("renameFailed") + ex.Message, "DeskFence"); }
+        }
+
+        void ShowSimpleItemMenu(ItemData it)
+        {
             ContextMenuStrip m = new ContextMenuStrip();
             m.Items.Add(T.S("open"), null, delegate { OpenItem(Data.Items.IndexOf(it)); });
+            if (DesktopHelper.Exists(it.CurrentPath())) m.Items.Add(T.S("renameFile"), null, delegate { RenameItem(it); });
             if (!it.IsStored())
             {
                 m.Items.Add(T.S("openLocation"), null, delegate
@@ -803,6 +958,7 @@ namespace DeskFence
 
         void StartItemDrag(int idx)
         {
+            HideNameTip();
             if (idx < 0 || idx >= Data.Items.Count) return;
             ItemData it = Data.Items[idx];
             DataObject d = new DataObject();

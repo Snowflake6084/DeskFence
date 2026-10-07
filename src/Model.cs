@@ -21,6 +21,11 @@ namespace DeskFence
             return Path;
         }
 
+        public bool IsStoredPathOf(string p)
+        {
+            return !string.IsNullOrEmpty(StoredPath) && DesktopHelper.SamePath(StoredPath, p);
+        }
+
         public bool IsStored()
         {
             return !string.IsNullOrEmpty(StoredPath) && DesktopHelper.Exists(StoredPath);
