@@ -71,6 +71,7 @@ namespace DeskFence
         public bool CleanExit = true;
         public bool HideTray;                  // 隐藏托盘图标（设置从格子标题栏的齿轮进入）          // 上次是否正常退出（文件都已放回）
         public List<FenceData> Fences = new List<FenceData>();
+        public List<LayoutSnapshot> Layouts = new List<LayoutSnapshot>();   // 保存的布局（手动 + 自动备份）
 
         public static string DataDir
         {
@@ -99,6 +100,8 @@ namespace DeskFence
                         if (c.BgAlphaPercent < 5 || c.BgAlphaPercent > 95) c.BgAlphaPercent = 50;
                         if (c.AllAlphaPercent < 30 || c.AllAlphaPercent > 100) c.AllAlphaPercent = 100;
                         if (c.Language == null) c.Language = "";
+                        if (c.Layouts == null) c.Layouts = new List<LayoutSnapshot>();
+                        c.Layouts.RemoveAll(delegate(LayoutSnapshot x) { return x == null || x.Fences == null; });
                         return c;
                     }
                 }
@@ -643,6 +646,108 @@ namespace DeskFence
     }
 
     /// <summary>纯布局计算（不依赖 Win32，方便测试）</summary>
+    public class FencePos
+    {
+        public string Id;
+        public int X, Y, W, H;
+        public bool Collapsed;
+    }
+
+    /// <summary>某一次的格子布局（位置、大小、折叠）</summary>
+    public class LayoutSnapshot
+    {
+        public string Name = "";
+        public DateTime Time;
+        public bool Auto;
+        public List<FencePos> Fences = new List<FencePos>();
+    }
+
+    static class Layouts
+    {
+        public const int MaxAuto = 5;
+
+        public static LayoutSnapshot Capture(AppConfig c, string name, bool auto)
+        {
+            LayoutSnapshot s = new LayoutSnapshot();
+            s.Name = name ?? "";
+            s.Time = DateTime.Now;
+            s.Auto = auto;
+            foreach (FenceData f in c.Fences)
+            {
+                FencePos p = new FencePos();
+                p.Id = f.Id; p.X = f.X; p.Y = f.Y; p.W = f.W; p.H = f.H; p.Collapsed = f.Collapsed;
+                s.Fences.Add(p);
+            }
+            return s;
+        }
+
+        public static bool Same(LayoutSnapshot a, LayoutSnapshot b)
+        {
+            if (a == null || b == null || a.Fences.Count != b.Fences.Count) return false;
+            for (int i = 0; i < a.Fences.Count; i++)
+            {
+                FencePos x = a.Fences[i], y = b.Fences[i];
+                if (x.Id != y.Id || x.X != y.X || x.Y != y.Y || x.W != y.W || x.H != y.H || x.Collapsed != y.Collapsed) return false;
+            }
+            return true;
+        }
+
+        /// <summary>加一个自动备份：和最近一个自动备份相同就不加；最多保留 MaxAuto 个</summary>
+        public static bool AddAuto(AppConfig c, LayoutSnapshot s)
+        {
+            LayoutSnapshot last = null;
+            foreach (LayoutSnapshot x in c.Layouts) if (x.Auto && (last == null || x.Time > last.Time)) last = x;
+            if (last != null && Same(last, s)) return false;
+            c.Layouts.Add(s);
+            List<LayoutSnapshot> autos = c.Layouts.FindAll(delegate(LayoutSnapshot x) { return x.Auto; });
+            autos.Sort(delegate(LayoutSnapshot a, LayoutSnapshot b) { return a.Time.CompareTo(b.Time); });
+            for (int i = 0; i < autos.Count - MaxAuto; i++) c.Layouts.Remove(autos[i]);
+            return true;
+        }
+
+        /// <summary>把布局套用到现有格子上（按 Id 对应，已删除的格子跳过）。返回套用的格子数。</summary>
+        public static int Apply(AppConfig c, LayoutSnapshot s)
+        {
+            int n = 0;
+            foreach (FencePos p in s.Fences)
+                foreach (FenceData f in c.Fences)
+                    if (f.Id == p.Id)
+                    {
+                        f.X = p.X; f.Y = p.Y; f.W = p.W; f.H = p.H; f.Collapsed = p.Collapsed;
+                        n++;
+                    }
+            return n;
+        }
+    }
+
+    /// <summary>
+    /// 格子实际显示在哪：保存的位置（Data.X/Y）在屏幕上就用它；
+    /// 屏幕变小/少了一块（远程桌面、拔显示器）时只是临时挪到能看见的地方，不改保存的位置，
+    /// 屏幕恢复后自动回到原位。
+    /// </summary>
+    static class Placement
+    {
+        public static bool TitleVisible(Rectangle r, Rectangle[] workAreas, int titleH, int minVisible)
+        {
+            Rectangle title = new Rectangle(r.X, r.Y, r.Width, titleH);
+            foreach (Rectangle wa in workAreas)
+            {
+                Rectangle i = Rectangle.Intersect(wa, title);
+                if (i.Width >= Math.Min(minVisible, r.Width) && i.Height >= titleH / 2) return true;
+            }
+            return false;
+        }
+
+        public static Rectangle Compute(Rectangle saved, Rectangle[] workAreas, Rectangle primary, int titleH, int minVisible)
+        {
+            if (TitleVisible(saved, workAreas, titleH, minVisible)) return saved;
+            int w = saved.Width, h = saved.Height;
+            int x = Math.Max(primary.X, Math.Min(saved.X, primary.Right - Math.Min(w, primary.Width)));
+            int y = Math.Max(primary.Y, Math.Min(saved.Y, primary.Bottom - titleH));
+            return new Rectangle(x, y, w, h);
+        }
+    }
+
     public class FenceLayout
     {
         public float S = 1f;

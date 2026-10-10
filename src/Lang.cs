@@ -110,6 +110,14 @@ namespace DeskFence
                 "移動先に config.xml が既にあります：\n{0}\n\n現在の設定で上書きしますか？");
             A("configChanged", "配置文件已移到：\n{0}", "Settings file moved to:\n{0}", "設定ファイルを移動しました：\n{0}");
             A("moveFailed", "操作失败：", "Operation failed: ", "失敗しました：");
+            A("layouts", "布局", "Layouts", "レイアウト");
+            A("saveLayout", "保存当前布局...", "Save current layout...", "現在のレイアウトを保存...");
+            A("layoutName", "布局名称：", "Layout name:", "レイアウト名：");
+            A("restoreLayout", "恢复这个布局", "Restore this layout", "このレイアウトに戻す");
+            A("deleteLayout", "删除", "Delete", "削除");
+            A("autoLayout", "自动备份 ", "Auto backup ", "自動バックアップ ");
+            A("noLayouts", "（还没有保存的布局）", "(no saved layouts yet)", "（保存されたレイアウトはありません）");
+            A("layoutSaved", "已保存布局「{0}」", "Layout \"{0}\" saved", "レイアウト「{0}」を保存しました");
             A("openConfig", "打开配置文件夹", "Open settings folder", "設定フォルダーを開く");
             A("exit", "退出（收纳的文件放回桌面）", "Exit (stored files go back to desktop)", "終了（収納したファイルをデスクトップに戻す）");
             A("exitKeep", "退出（文件不恢复到桌面）", "Exit (keep files in fences)", "終了（ファイルをデスクトップに戻さない）");

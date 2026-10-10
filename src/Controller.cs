@@ -70,6 +70,7 @@ namespace DeskFence
                     }
                     MigrateAndReconcile();
                     RelinkMissing(false);
+                    Layouts.AddAuto(Config, Layouts.Capture(Config, "", true)); // 每次启动自动备份一次布局
                     if (Config.HideDesktopIcons) CollectAll(false);
                     Config.CleanExit = false;
                     Save();
@@ -104,10 +105,83 @@ namespace DeskFence
             guard.Start();
             // 前台窗口变化（按 Win+D 显示桌面、点桌面等）时立刻自检，不用等 2 秒
             HookForeground();
+            // 分辨率变化（远程桌面连接/断开、拔插显示器）：等 3 秒稳定后，按保存的位置重新摆放
             SystemEvents.DisplaySettingsChanged += delegate
             {
-                ui.BeginInvoke((MethodInvoker)delegate { foreach (FenceForm ff in forms.ToArray()) ff.Guard(); });
+                try { ui.BeginInvoke((MethodInvoker)delegate { OnDisplayChanged(); }); } catch { }
             };
+        }
+
+        Timer displayTimer;
+
+        void OnDisplayChanged()
+        {
+            if (displayTimer == null)
+            {
+                displayTimer = new Timer();
+                displayTimer.Interval = 3000;
+                displayTimer.Tick += delegate
+                {
+                    displayTimer.Stop();
+                    if (exiting) return;
+                    Rectangle wa = Screen.PrimaryScreen.Bounds;
+                    Log.Write("显示设置变化：主屏 " + wa.Width + "x" + wa.Height + "，共 " + Screen.AllScreens.Length + " 个屏幕；格子按保存的位置重新摆放");
+                    foreach (FenceForm ff in forms.ToArray()) ff.ApplyPlacement();
+                };
+            }
+            displayTimer.Stop();
+            displayTimer.Start();
+        }
+
+        // ================= 布局 =================
+
+        void FillLayoutMenu(ToolStripMenuItem root)
+        {
+            root.DropDownItems.Add(T.S("saveLayout"), null, delegate { SaveLayoutAs(); });
+            root.DropDownItems.Add(new ToolStripSeparator());
+            List<LayoutSnapshot> list = new List<LayoutSnapshot>(Config.Layouts);
+            list.Sort(delegate(LayoutSnapshot a, LayoutSnapshot b)
+            {
+                if (a.Auto != b.Auto) return a.Auto ? 1 : -1;   // 手动保存的在前
+                return b.Time.CompareTo(a.Time);                   // 新的在前
+            });
+            if (list.Count == 0)
+            {
+                ToolStripMenuItem none = new ToolStripMenuItem(T.S("noLayouts")); none.Enabled = false;
+                root.DropDownItems.Add(none);
+            }
+            foreach (LayoutSnapshot snap in list)
+            {
+                LayoutSnapshot s = snap;
+                string text = s.Auto ? T.S("autoLayout") + s.Time.ToString("MM-dd HH:mm")
+                                     : s.Name + "   (" + s.Time.ToString("MM-dd HH:mm") + ")";
+                ToolStripMenuItem item = new ToolStripMenuItem(text);
+                item.DropDownItems.Add(T.S("restoreLayout"), null, delegate { RestoreLayout(s); });
+                item.DropDownItems.Add(T.S("deleteLayout"), null, delegate { Config.Layouts.Remove(s); Save(); });
+                root.DropDownItems.Add(item);
+            }
+        }
+
+        void SaveLayoutAs()
+        {
+            string name = InputDialog.Ask(T.S("layoutName"), DateTime.Now.ToString("yyyy-MM-dd HH:mm"), Cursor.Position);
+            if (name == null) return;
+            name = name.Trim();
+            if (name.Length == 0) name = DateTime.Now.ToString("yyyy-MM-dd HH:mm");
+            Config.Layouts.RemoveAll(delegate(LayoutSnapshot x) { return !x.Auto && x.Name == name; }); // 同名覆盖
+            Config.Layouts.Add(Layouts.Capture(Config, name, false));
+            Save();
+            Notify(T.F("layoutSaved", name));
+        }
+
+        void RestoreLayout(LayoutSnapshot s)
+        {
+            // 先把当前布局存一份自动备份，恢复错了还能退回来
+            Layouts.AddAuto(Config, Layouts.Capture(Config, "", true));
+            int n = Layouts.Apply(Config, s);
+            foreach (FenceForm ff in forms.ToArray()) { ff.FixSize(); ff.ApplyPlacement(); ff.Render(); }
+            Save();
+            Log.Write("恢复布局「" + (s.Auto ? "自动备份 " + s.Time.ToString("MM-dd HH:mm") : s.Name) + "」：" + n + " 个格子");
         }
 
         Native.WinEventProc winEventProc; // 必须保存引用，否则会被回收导致崩溃
@@ -538,6 +612,9 @@ namespace DeskFence
             });
 
             m.Items.Add(T.S("opacity"), null, delegate { ShowOpacityDialog(); });
+            ToolStripMenuItem layoutMenu = new ToolStripMenuItem(T.S("layouts"));
+            FillLayoutMenu(layoutMenu);
+            m.Items.Add(layoutMenu);
 
             ToolStripMenuItem collect = new ToolStripMenuItem(T.S("collectMode"));
             collect.Checked = Config.HideDesktopIcons;

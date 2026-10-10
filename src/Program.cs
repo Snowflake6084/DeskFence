@@ -297,6 +297,45 @@ namespace DeskFence
             AppConfig cy = AppConfig.Load(file);
             Check(!cy.CleanExit && cy.Fences[0].Items[0].StoredPath == "q", "配置读写：收纳位置和退出状态");
 
+            // 12. 屏幕变化时不改保存的位置
+            {
+                Rectangle big = new Rectangle(0, 0, 1920, 1040), small = new Rectangle(0, 0, 1024, 728);
+                Rectangle fA = new Rectangle(1500, 100, 300, 400), fB = new Rectangle(1500, 600, 300, 300), fC = new Rectangle(100, 100, 300, 400);
+                Check(Placement.Compute(fA, new Rectangle[] { big }, big, 30, 60) == fA, "布局：屏幕正常时就在保存的位置");
+                Rectangle a1 = Placement.Compute(fA, new Rectangle[] { small }, small, 30, 60);
+                Rectangle b1 = Placement.Compute(fB, new Rectangle[] { small }, small, 30, 60);
+                Check(small.Contains(new Point(a1.X + 10, a1.Y + 10)) && a1.Size == fA.Size, "布局：屏幕变小时临时挪进屏幕，大小不变");
+                Check(a1.Location != b1.Location, "布局：屏幕变小时多个格子不会叠在同一个位置");
+                Check(Placement.Compute(fC, new Rectangle[] { small }, small, 30, 60) == fC, "布局：本来就在小屏范围内的格子不动");
+                Check(Placement.Compute(fA, new Rectangle[] { big }, big, 30, 60) == fA, "布局：屏幕恢复后回到原位");
+                Rectangle two = new Rectangle(1920, 0, 1920, 1040);
+                Rectangle fD = new Rectangle(2500, 200, 300, 300);
+                Check(Placement.Compute(fD, new Rectangle[] { big, two }, big, 30, 60) == fD, "布局：副屏上的格子在副屏还在时不动");
+                Check(big.Contains(Placement.Compute(fD, new Rectangle[] { big }, big, 30, 60).Location), "布局：拔掉副屏时临时挪到主屏");
+            }
+
+            // 13. 保存/恢复布局
+            {
+                AppConfig lc = new AppConfig();
+                FenceData l1 = new FenceData(); l1.X = 10; l1.Y = 20; l1.W = 300; l1.H = 400;
+                FenceData l2 = new FenceData(); l2.X = 500; l2.Y = 20; l2.W = 200; l2.H = 300; l2.Collapsed = true;
+                lc.Fences.Add(l1); lc.Fences.Add(l2);
+                LayoutSnapshot snap = Layouts.Capture(lc, "工作", false);
+                lc.Layouts.Add(snap);
+                l1.X = 80; l1.Y = 80; l2.X = 80; l2.Y = 80; l2.Collapsed = false; // 模拟布局被打乱
+                FenceData l3 = new FenceData(); lc.Fences.Add(l3);                // 之后新建的格子
+                int applied = Layouts.Apply(lc, snap);
+                Check(applied == 2 && l1.X == 10 && l1.Y == 20 && l2.X == 500 && l2.Collapsed, "布局：恢复后位置/折叠还原");
+                Check(l3.X == 100, "布局：恢复时不影响之后新建的格子");
+                Check(Layouts.AddAuto(lc, Layouts.Capture(lc, "", true)) && !Layouts.AddAuto(lc, Layouts.Capture(lc, "", true)), "布局：相同布局不重复自动备份");
+                for (int k = 0; k < 10; k++) { l1.X = 1000 + k; Layouts.AddAuto(lc, Layouts.Capture(lc, "", true)); }
+                Check(lc.Layouts.FindAll(delegate(LayoutSnapshot x) { return x.Auto; }).Count == Layouts.MaxAuto && lc.Layouts.Contains(snap), "布局：自动备份最多 5 个，手动保存的不删");
+                string lf = Path.Combine(dir, "layout.xml");
+                lc.Save(lf);
+                AppConfig lr = AppConfig.Load(lf);
+                Check(lr.Layouts.Count == lc.Layouts.Count && lr.Layouts.Find(delegate(LayoutSnapshot x) { return x.Name == "工作"; }).Fences[1].X == 500, "布局：保存后能读回");
+            }
+
             // 11. 自定义存放文件夹：已收纳的文件整体搬过去
             {
                 string oldStore = Path.Combine(dir, "s_old"), newStore = Path.Combine(dir, "s_new");

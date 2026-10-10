@@ -46,8 +46,30 @@ namespace DeskFence
             MaximizeBox = false;
             titleFont = new Font("Microsoft YaHei UI", 13f * L.S, FontStyle.Regular, GraphicsUnit.Pixel);
             itemFont = new Font("Microsoft YaHei UI", 12f * L.S, FontStyle.Regular, GraphicsUnit.Pixel);
-            FixBounds();
-            Bounds = new Rectangle(Data.X, Data.Y, Data.W, Data.Collapsed ? L.TitleH : Data.H);
+            FixSize();
+            Bounds = DesiredBounds();
+        }
+
+        /// <summary>按保存的位置算出应该显示在哪（不修改保存的位置）</summary>
+        public Rectangle DesiredBounds()
+        {
+            Rectangle saved = new Rectangle(Data.X, Data.Y, Data.W, Data.Collapsed ? L.TitleH : Data.H);
+            Screen[] all = Screen.AllScreens;
+            Rectangle[] areas = new Rectangle[all.Length];
+            for (int i = 0; i < all.Length; i++) areas[i] = all[i].WorkingArea;
+            return Placement.Compute(saved, areas, Screen.PrimaryScreen.WorkingArea, L.TitleH, L.R(60));
+        }
+
+        /// <summary>把窗口放到应在的位置（拖动/改大小过程中不动）</summary>
+        public void ApplyPlacement()
+        {
+            if (IsDisposed || mode != Mode.None) return;
+            Rectangle d = DesiredBounds();
+            if (Bounds != d)
+            {
+                Bounds = d;
+                Render();
+            }
         }
 
         int MinW { get { return L.R(120); } }
@@ -86,24 +108,12 @@ namespace DeskFence
                     PlaceAboveDesktop();
                 }
                 else wasBelow = false;
-                if (!IsOnAnyScreen())
-                {
-                    Data.X = Left; Data.Y = Top;
-                    FixBounds();
-                    Location = new Point(Data.X, Data.Y);
-                    Render();
-                }
+                // 被系统挪了位置（分辨率变化、远程桌面连接/断开）：按保存的位置放回去
+                ApplyPlacement();
             }
             catch (Exception ex) { Log.Write("格子自检出错: " + ex.Message); }
         }
 
-        bool IsOnAnyScreen()
-        {
-            Rectangle r = new Rectangle(Left, Top, Width, L.TitleH);
-            foreach (Screen s in Screen.AllScreens)
-                if (s.WorkingArea.IntersectsWith(r)) return true;
-            return false;
-        }
 
         /// <summary>从自己往下找，能找到桌面窗口说明自己在桌面上面</summary>
         bool IsAboveDesktop()
@@ -134,20 +144,11 @@ namespace DeskFence
                 Native.SWP_NOMOVE | Native.SWP_NOSIZE | Native.SWP_NOACTIVATE | Native.SWP_NOOWNERZORDER);
         }
 
-        public void FixBounds()
+        /// <summary>只修正太小的尺寸；位置永远不在这里改（以前在这里把屏幕外的格子都挪到同一点，导致布局丢失）</summary>
+        public void FixSize()
         {
             if (Data.W < MinW) Data.W = MinW;
             if (Data.H < MinH) Data.H = MinH;
-            Rectangle r = new Rectangle(Data.X, Data.Y, Data.W, L.TitleH);
-            bool onScreen = false;
-            foreach (Screen s in Screen.AllScreens)
-                if (s.WorkingArea.IntersectsWith(r)) { onScreen = true; break; }
-            if (!onScreen)
-            {
-                Rectangle wa = Screen.PrimaryScreen.WorkingArea;
-                Data.X = wa.X + L.R(80);
-                Data.Y = wa.Y + L.R(80);
-            }
         }
 
         protected override CreateParams CreateParams
