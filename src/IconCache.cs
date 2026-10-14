@@ -10,24 +10,67 @@ namespace DeskFence
     static class IconCache
     {
         static readonly Dictionary<string, Bitmap> cache = new Dictionary<string, Bitmap>(StringComparer.OrdinalIgnoreCase);
-        static IImageList smallList, bigList;
+        static readonly Dictionary<int, IImageList> lists = new Dictionary<int, IImageList>();
+        static readonly Dictionary<int, int> listSizes = new Dictionary<int, int>();
 
-        public static Bitmap Get(string path, bool big)
+        /// <summary>系统图标列表按尺寸从小到大：16、32（随系统缩放）、48、256</summary>
+        static readonly int[] ListOrder = { Native.SHIL_SMALL, Native.SHIL_LARGE, Native.SHIL_EXTRALARGE, Native.SHIL_JUMBO };
+
+        /// <summary>取最接近 px 的系统图标：优先尺寸正好相等（画出来最清晰），否则取比 px 大的最小那个再缩小</summary>
+        public static Bitmap Get(string path, int px)
         {
-            string key = (big ? "L|" : "S|") + path;
+            int list = PickList(px);
+            string key = list + "|" + path;
             Bitmap b;
             if (cache.TryGetValue(key, out b)) return b;
             b = null;
-            try { b = Load(path, big); } catch (Exception ex) { Log.Write("取图标失败 " + path + ": " + ex.Message); }
-            if (b == null) b = Fallback(path, big);
+            try { b = Load(path, list); } catch (Exception ex) { Log.Write("取图标失败 " + path + ": " + ex.Message); }
+            if (b == null) b = Fallback(path, px);
             cache[key] = b;
             return b;
         }
 
+        static int PickList(int px)
+        {
+            int best = Native.SHIL_JUMBO;
+            foreach (int l in ListOrder)
+            {
+                int size = ListSize(l);
+                if (size <= 0) continue;
+                if (size == px) return l;
+                if (size > px) { best = l; break; }
+            }
+            return best;
+        }
+
+        static int ListSize(int list)
+        {
+            int v;
+            if (listSizes.TryGetValue(list, out v)) return v;
+            v = 0;
+            try
+            {
+                IImageList il = GetList(list);
+                if (il != null)
+                {
+                    IntPtr h = IntPtr.Zero;
+                    // 取 0 号图标看尺寸
+                    if (il.GetIcon(0, Native.ILD_TRANSPARENT, ref h) == 0 && h != IntPtr.Zero)
+                    {
+                        using (Bitmap bm = IconToBitmap(h)) if (bm != null) v = bm.Width;
+                        Native.DestroyIcon(h);
+                    }
+                }
+            }
+            catch { }
+            if (v <= 0) v = list == Native.SHIL_SMALL ? 16 : list == Native.SHIL_LARGE ? 32 : list == Native.SHIL_EXTRALARGE ? 48 : 256;
+            listSizes[list] = v;
+            return v;
+        }
+
         public static void Invalidate(string path)
         {
-            Remove("L|" + path);
-            Remove("S|" + path);
+            foreach (int l in ListOrder) Remove(l + "|" + path);
         }
 
         static void Remove(string key)
@@ -36,19 +79,18 @@ namespace DeskFence
             if (cache.TryGetValue(key, out b)) { cache.Remove(key); if (b != null) b.Dispose(); }
         }
 
-        static IImageList GetList(bool big)
+        static IImageList GetList(int list)
         {
-            if (big && bigList != null) return bigList;
-            if (!big && smallList != null) return smallList;
-            Guid iid = new Guid("46EB5926-582E-4017-9FDF-E8998DAA0950");
             IImageList il;
-            int hr = Native.SHGetImageList(big ? Native.SHIL_EXTRALARGE : Native.SHIL_SMALL, ref iid, out il);
-            if (hr != 0) return null;
-            if (big) bigList = il; else smallList = il;
+            if (lists.TryGetValue(list, out il)) return il;
+            Guid iid = new Guid("46EB5926-582E-4017-9FDF-E8998DAA0950");
+            int hr = Native.SHGetImageList(list, ref iid, out il);
+            if (hr != 0) il = null;
+            lists[list] = il;
             return il;
         }
 
-        static Bitmap Load(string path, bool big)
+        static Bitmap Load(string path, int list)
         {
             Native.SHFILEINFO sfi = new Native.SHFILEINFO();
             uint cb = (uint)Marshal.SizeOf(typeof(Native.SHFILEINFO));
@@ -66,7 +108,7 @@ namespace DeskFence
 
             int index = sfi.iIcon & 0x00FFFFFF;
             int overlay = (sfi.iIcon >> 24) & 0xFF;
-            IImageList il = GetList(big);
+            IImageList il = GetList(list);
             if (il == null) return null;
             IntPtr hicon = IntPtr.Zero;
             int hr = il.GetIcon(index, Native.ILD_TRANSPARENT | (overlay << 8), ref hicon);
@@ -150,7 +192,7 @@ namespace DeskFence
             return bi;
         }
 
-        static Bitmap Fallback(string path, bool big)
+        static Bitmap Fallback(string path, int px)
         {
             try
             {
@@ -161,7 +203,7 @@ namespace DeskFence
                 }
             }
             catch { }
-            int sz = big ? 48 : 16;
+            int sz = Math.Max(16, px);
             Bitmap b = new Bitmap(sz, sz, PixelFormat.Format32bppArgb);
             using (Graphics g = Graphics.FromImage(b))
             using (Brush br = new SolidBrush(Color.FromArgb(200, 200, 200, 210)))

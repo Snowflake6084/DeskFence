@@ -340,7 +340,8 @@ namespace DeskFence
             g.SmoothingMode = SmoothingMode.AntiAlias;
             g.InterpolationMode = InterpolationMode.HighQualityBicubic;
             g.PixelOffsetMode = PixelOffsetMode.HighQuality;
-            g.TextRenderingHint = TextRenderingHint.AntiAliasGridFit;
+            // 透明窗口上不能用 GridFit/ClearType：边缘会和"透明黑"混合，字看起来发灰发暗
+            g.TextRenderingHint = TextRenderingHint.AntiAlias;
             g.Clear(Color.Transparent);
 
             int a = Math.Max(12, Math.Min(250, app.Config.BgAlphaPercent * 255 / 100));
@@ -487,7 +488,7 @@ namespace DeskFence
             Rectangle hl = Rectangle.Inflate(r, -L.R(2), -L.R(1));
             if (i == selected || i == hover)
             {
-                using (Brush b = new SolidBrush(Color.FromArgb(i == selected ? 70 : 38, 255, 255, 255)))
+                using (Brush b = new SolidBrush(Color.FromArgb(i == selected ? 60 : 38, 255, 255, 255)))
                 using (GraphicsPath p = Round(hl, L.R(3))) g.FillPath(b, p);
             }
             string name = DesktopHelper.DisplayName(it.Path);
@@ -506,8 +507,8 @@ namespace DeskFence
             {
                 if (Data.ListMode)
                 {
-                    Bitmap ic = IconCache.Get(cur, false);
-                    int sz = L.R(16);
+                    int sz = L.SmallIcon;
+                    Bitmap ic = IconCache.Get(cur, sz);
                     Rectangle ir = new Rectangle(r.X + L.R(8), r.Y + (r.Height - sz) / 2, sz, sz);
                     DrawImage(g, ic, ir, ia);
                     Rectangle tr = new Rectangle(ir.Right + L.R(7), r.Y, r.Right - ir.Right - L.R(12), r.Height);
@@ -516,8 +517,8 @@ namespace DeskFence
                 }
                 else
                 {
-                    Bitmap ic = IconCache.Get(cur, true);
-                    int sz = Math.Min(L.R(40), Math.Max(ic.Width, L.R(32)));
+                    int sz = L.BigIcon;
+                    Bitmap ic = IconCache.Get(cur, sz);
                     Rectangle ir = new Rectangle(r.X + (r.Width - sz) / 2, r.Y + L.R(5), sz, sz);
                     DrawImage(g, ic, ir, ia);
                     Rectangle tr = new Rectangle(r.X + L.R(3), ir.Bottom + L.R(3), r.Width - L.R(6), r.Bottom - ir.Bottom - L.R(4));
@@ -574,11 +575,24 @@ namespace DeskFence
             tipTimer.Start();
         }
 
+        /// <summary>尺寸正好相等时原样画（不插值，最清晰）；不相等才高质量缩放</summary>
         static void DrawImage(Graphics g, Bitmap b, Rectangle r, ImageAttributes ia)
         {
             if (b == null) return;
-            if (ia == null) g.DrawImage(b, r);
-            else g.DrawImage(b, r, 0, 0, b.Width, b.Height, GraphicsUnit.Pixel, ia);
+            InterpolationMode im = g.InterpolationMode;
+            PixelOffsetMode pm = g.PixelOffsetMode;
+            bool exact = b.Width == r.Width && b.Height == r.Height;
+            if (exact)
+            {
+                g.InterpolationMode = InterpolationMode.NearestNeighbor;
+                g.PixelOffsetMode = PixelOffsetMode.Half;
+            }
+            try
+            {
+                if (ia == null) g.DrawImage(b, r, 0, 0, b.Width, b.Height, GraphicsUnit.Pixel);
+                else g.DrawImage(b, r, 0, 0, b.Width, b.Height, GraphicsUnit.Pixel, ia);
+            }
+            finally { g.InterpolationMode = im; g.PixelOffsetMode = pm; }
         }
 
         static void DrawText(Graphics g, string s, Font f, Rectangle r, StringAlignment h, StringAlignment v, Color c, bool wrapEllipsis)
@@ -591,7 +605,8 @@ namespace DeskFence
                 if (!wrapEllipsis || v == StringAlignment.Center) sf.FormatFlags |= StringFormatFlags.NoWrap;
                 sf.FormatFlags |= StringFormatFlags.LineLimit;
                 RectangleF rf = r;
-                using (Brush sh = new SolidBrush(Color.FromArgb(Math.Min(200, (int)c.A), 0, 0, 0)))
+                // 淡阴影（以前阴影太重，压住了白字，看起来偏暗）
+                using (Brush sh = new SolidBrush(Color.FromArgb(Math.Min(110, (int)c.A / 2), 0, 0, 0)))
                 {
                     RectangleF rs = rf; rs.Offset(1, 1);
                     g.DrawString(s, f, sh, rs, sf);
@@ -636,6 +651,7 @@ namespace DeskFence
             }
             int idx = Data.Collapsed ? -1 : L.HitItem(e.Location);
             if (selected != idx) { selected = idx; Render(); }
+            if (selected != -1) WatchLeave();
             if (idx >= 0) { mode = Mode.ItemPending; downItem = idx; }
         }
 
@@ -690,6 +706,7 @@ namespace DeskFence
                 Render();
                 if (itemChanged) ScheduleNameTip();
             }
+            if (hover != -1 || hoverButton != -1 || selected != -1) WatchLeave();
         }
 
         protected override void OnMouseUp(MouseEventArgs e)
@@ -720,8 +737,56 @@ namespace DeskFence
         protected override void OnMouseLeave(EventArgs e)
         {
             base.OnMouseLeave(e);
+            if (menuOpen) return;
+            ClearHighlight();
+        }
+
+        bool menuOpen;
+        Timer leaveTimer;
+
+        /// <summary>鼠标离开格子：取消悬停和选中高亮</summary>
+        void ClearHighlight()
+        {
             HideNameTip();
-            if (hover != -1 || hoverButton != -1) { hover = -1; hoverButton = -1; Render(); }
+            if (leaveTimer != null) leaveTimer.Stop();
+            if (hover != -1 || hoverButton != -1 || selected != -1)
+            {
+                hover = -1; hoverButton = -1; selected = -1;
+                Render();
+            }
+        }
+
+        /// <summary>
+        /// 透明窗口有时收不到"鼠标离开"（鼠标移得快、远程桌面卡顿时），
+        /// 有高亮期间每 200 毫秒自己看一下鼠标还在不在格子上
+        /// </summary>
+        void WatchLeave()
+        {
+            if (leaveTimer == null)
+            {
+                leaveTimer = new Timer();
+                leaveTimer.Interval = 200;
+                leaveTimer.Tick += delegate
+                {
+                    if (IsDisposed || menuOpen || mode != Mode.None) return;
+                    if (hover == -1 && hoverButton == -1 && selected == -1) { leaveTimer.Stop(); return; }
+                    if (!IsMouseOverMe()) ClearHighlight();
+                };
+            }
+            if (!leaveTimer.Enabled) leaveTimer.Start();
+        }
+
+        bool IsMouseOverMe()
+        {
+            Point p = Cursor.Position;
+            if (!Bounds.Contains(p)) return false;
+            try
+            {
+                IntPtr h = Native.WindowFromPoint(new Native.POINT(p.X, p.Y));
+                IntPtr root = Native.GetAncestor(h, 2 /*GA_ROOT*/);
+                return h == Handle || root == Handle;
+            }
+            catch { return true; }
         }
 
         protected override void OnMouseDoubleClick(MouseEventArgs e)
@@ -833,8 +898,9 @@ namespace DeskFence
                 Point pt = Cursor.Position;
                 uint cmd;
                 activeShellMenu = sm;
+                menuOpen = true;
                 try { cmd = sm.Track(Handle, pt.X, pt.Y); }
-                finally { activeShellMenu = null; }
+                finally { activeShellMenu = null; menuOpen = false; if (!IsMouseOverMe()) ClearHighlight(); }
                 if (cmd == 0) return;
 
                 if (cmd == ID_REMOVE) { selected = hover = -1; app.RemoveItem(this, it); return; }
@@ -927,7 +993,12 @@ namespace DeskFence
 
         void ShowMenu(ContextMenuStrip m)
         {
-            m.Closed += delegate { BeginInvoke((MethodInvoker)delegate { m.Dispose(); }); };
+            menuOpen = true;
+            m.Closed += delegate
+            {
+                menuOpen = false;
+                BeginInvoke((MethodInvoker)delegate { m.Dispose(); if (!IsMouseOverMe()) ClearHighlight(); });
+            };
             m.Show(Cursor.Position);
         }
 

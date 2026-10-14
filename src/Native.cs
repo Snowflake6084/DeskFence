@@ -33,7 +33,9 @@ namespace DeskFence
         public const uint SHGFI_USEFILEATTRIBUTES = 0x10;
         public const uint FILE_ATTRIBUTE_NORMAL = 0x80;
         public const uint FILE_ATTRIBUTE_DIRECTORY = 0x10;
+        public const int SHIL_LARGE = 0;
         public const int SHIL_SMALL = 1;
+        public const int SHIL_JUMBO = 4;
         public const int SHIL_EXTRALARGE = 2;
         public const int ILD_TRANSPARENT = 1;
 

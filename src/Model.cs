@@ -758,8 +758,10 @@ namespace DeskFence
 
         public int TitleH { get { return R(30); } }
         public int Pad { get { return R(6); } }
-        public int CellMinW { get { return R(80); } }
-        public int CellH { get { return R(80); } }
+        public int CellMinW { get { return R(84); } }
+        public int CellH { get { return R(96); } }
+        public int BigIcon { get { return R(48); } }   // 图标模式：和桌面默认"中等图标"一样大
+        public int SmallIcon { get { return R(16); } }
         public int RowH { get { return R(26); } }
         public int Grip { get { return R(7); } }
 
